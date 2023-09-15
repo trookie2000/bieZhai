@@ -146,7 +146,7 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
   sendOffer();
 };
 
-// 初始化 RTCPeerConnection
+// 初始化 RTCPeerConnections
 const initRTCPeerConnection = () => {
   const iceServer: object = {
     iceServers: [
