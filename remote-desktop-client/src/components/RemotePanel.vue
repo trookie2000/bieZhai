@@ -46,7 +46,7 @@ onBeforeMount(async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://172.20.10.5:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://192.168.0.124:8081/conn/${data.account.id}`);
  
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -305,7 +305,7 @@ const remoteDesktop = async () => {
   // 显示远程桌面面板
   data.isShowRemoteDesktop = true;
 
-  //将下下哦i发给被远程者
+  //将下下哦i发给被远程者1
   sendToServer({
     msg_type: MessageType.REMOTE_DESKTOP,
     receiver: data.receiverAccount.id,
