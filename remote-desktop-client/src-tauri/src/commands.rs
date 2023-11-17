@@ -1,4 +1,5 @@
 // 导入必要的库和模块
+
 use serde::Serialize;
 use tauri::command;
 
@@ -22,6 +23,7 @@ pub struct Account {
 
 // 生成账号信息的命令函数
 #[command]
+
 pub fn generate_account() -> Account {
     // 生成唯一标识符 UUID
     let uuid = Uuid::new_v4();
@@ -115,3 +117,4 @@ pub fn key_event(event_type: &str, key: &str) {
         _ => {}
     }
 }
+
