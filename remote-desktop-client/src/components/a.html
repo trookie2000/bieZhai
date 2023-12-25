@@ -1,41 +1,34 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>屏幕共享示例</title>
-</head>
-<body>
-    <h1>屏幕共享示例</h1>
-    <button id="startButton">开始共享屏幕</button>
-    <video id="screenVideo" autoplay></video>
-
-    <script>
-        const startButton = document.getElementById('startButton');
-        const screenVideo5 = document.getElementById('screenVideo');
-        let mediaStream = null;
-
-        // 添加点击事件处理程序
-        startButton.addEventListener('click', async () => {
-            try {
-                // 获取屏幕共享流
-                mediaStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-
-                // 将流添加到视频元素
-                screenVideo.srcObject = mediaStream;
-            } catch (error) {
-                console.error('获取屏幕共享流失败:', error);
-            }
-        });
-
-        // 停止屏幕共享
-        const stopScreenSharing = () => {
-            if (mediaStream) {
-                const tracks = mediaStream.getTracks();
-                tracks.forEach(track => track.stop());
-                screenVideo.srcObject = null;
-            }
-        };
-    </script>
-</body>
+<html>
+	<head>
+		<title>WebRTC ScreenConnection</title>
+		<style>
+			.preview{
+				display: flex;
+			}
+			.remote{
+				margin-left: 20px;
+			}
+		</style>
+	</head>
+	<body>
+		<div>
+			<div>
+				<button id="connserver">Connect Sig Server</button>
+				<button id="leave" disabled>Leave</button>
+			</div>
+			<div class="preview">
+				<div>
+					<h2>Local:</h2>
+					<video id="localvideo" autoplay playsinline></video>
+				</div>
+				<div class="remote">
+					<h2>Remote:</h2>
+					<video id="remotevideo" autoplay playsinline></video>
+				</div>
+			</div>
+		</div>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
+		<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+		<script src="./js/screen.js"></script>
+	</body>
 </html>

@@ -9,7 +9,8 @@
             "request": "launch",
             "name": "针对 localhost 启动 Chrome",
             "url": "http://localhost:8080",
-            "webRoot": "${workspaceFolder}"
+            "webRoot": "${workspaceFolder}/index.html",
+            "file": "${workspaceFolder}/remote-desktop-client/src/components/a.html"
         }
     ]
 }
