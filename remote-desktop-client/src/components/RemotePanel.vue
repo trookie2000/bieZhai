@@ -25,7 +25,7 @@ const data = reactive({
   isShowRemoteDesktop: false,
 });
 
-// 对象用于引用视频元素，DOM对象
+// 对象用于引用视频元素，DOM对象s
 const desktop = ref<HTMLVideoElement>();
 
 // WebSocket 连接和RTC其他变量
