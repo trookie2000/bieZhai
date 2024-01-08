@@ -133,12 +133,13 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
 
   initRTCDataChannel();
 
-  // 获取本地桌面流
+  // 获取本地桌面流s
   webcamStream = await navigator.mediaDevices.getDisplayMedia({
     video: true,
     audio: false,
   });
-
+  
+ 
   webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
     pc.addTrack(track, webcamStream)
   );
