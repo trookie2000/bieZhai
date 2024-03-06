@@ -7,6 +7,7 @@ use tauri::command;
 use enigo::{Enigo, MouseButton, MouseControllable};
 use enigo::{Key, KeyboardControllable};
 use uuid::Uuid;
+use mac_address::MacAddress;
 
 // 导入随机数生成库
 use rand::Rng;
@@ -27,9 +28,22 @@ pub struct Account {
 pub fn generate_account() -> Account {
     // 生成唯一标识符 UUID
     let uuid = Uuid::new_v4();
-    let id = uuid.to_string().replace("-", "");
-
+    let mac_result = mac_address::get_mac_address();
+    let id = if let Ok(Some(mac)) = mac_result {
+        mac.to_string()
+    } else {
+        String::from("Unknown") // 处理无法获取 MAC 地址的情况
+    };
+    let mac_result = mac_address::get_mac_address();
     let mut password = String::new();
+
+    if let Ok(Some(mac)) = mac_result{
+        println!("MAC address: {:?}", mac.to_string());
+    }
+    // let mac_result = mac_address::get_mac_address();
+    // if let Ok(Some(mac)) = mac_result{
+    //     println!("MAC address: {:?}", mac.to_string());
+    // }
 
     let mut random = rand::thread_rng();
 

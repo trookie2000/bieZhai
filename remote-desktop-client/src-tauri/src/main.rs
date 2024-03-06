@@ -75,7 +75,7 @@ fn main() {
                   window_url
               }
           )
-          .title("乱杀秋刀鱼")
+          .title("多端远控")
           .build()?;
           Ok(())
       })

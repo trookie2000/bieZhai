@@ -46,7 +46,7 @@ onBeforeMount(async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://172.20.64.1:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://172.19.80.1:8081/conn/${data.account.id}`);
  
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -248,6 +248,7 @@ const initRTCDataChannel = () => {
     ordered: true,
   });
 
+  //计算分辨率，鼠标属于哪个位置
   dc.onopen = (e: Event) => {
     console.log("数据通道已打开");
     dc.send(
@@ -301,8 +302,7 @@ const remoteDesktop = async () => {
     return;
   }
 
-  appWindow.setFullscreen(true);
-
+  appWindow.setFullscreen(false);
   // 显示远程桌面面板
   data.isShowRemoteDesktop = true;
 
@@ -423,7 +423,7 @@ const sendToClient = (msg: Record<string, any>) => {
   <div class="sidebar">
     <div>
       <p>
-        id: <span>{{ data.account.id }}</span>
+        address: <span>{{ data.account.id }}</span>
       </p>
       <p>
         password: <span>{{ data.account.password }}</span>

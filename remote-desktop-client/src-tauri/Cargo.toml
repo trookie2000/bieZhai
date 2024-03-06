@@ -16,6 +16,7 @@ tauri-build = { version = "1.0.4", features = [] }
 
 
 [dependencies]
+mac_address = "1.1.5"
 serde_json = "1.0"
 tauri-plugin-websocket = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v1" }
 portpicker = "0.1" # used in the example to pick a random free port
