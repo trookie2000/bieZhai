@@ -2,11 +2,13 @@
 // This starter template is using Vue 3 <script setup> SFCs
 // Check out https://vuejs.org/api/sfc-script-setup.html#script-setup
 import RemotePanel from "./components/RemotePanel.vue";
+import screenOne from "./components/screenOne.vue";
 </script>
 
 <template>
-  <RemotePanel />
+  <router-view></router-view>
 </template>
+
 
 <style scoped>
 </style>

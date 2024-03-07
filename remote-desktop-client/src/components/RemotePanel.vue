@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onBeforeMount } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow } from "@tauri-apps/api/window";
+import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
 // import TauriWebsocket from 'tauri-plugin-websocket-api';
 // import WebSocket from "tauri-plugin-websocket-api";
 import {
@@ -47,7 +47,7 @@ onBeforeMount(async () => {
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
   ws = new WebSocket(`ws://172.19.80.1:8081/conn/${data.account.id}`);
- 
+
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
     setInterval(() => {
@@ -138,8 +138,8 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
     video: true,
     audio: false,
   });
-  
- 
+
+
   webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
     pc.addTrack(track, webcamStream)
   );
@@ -301,7 +301,16 @@ const remoteDesktop = async () => {
     alert("请输入ID和密码");
     return;
   }
+  const webview = new WebviewWindow('theUniqueLabel', {
+    url: '#/screenOne',
+  })
 
+  webview.once('tauri://created', function () {
+
+  })
+  webview.once('tauri://error', function (e) {
+    // an error occurred during webview window creation
+  })
   appWindow.setFullscreen(false);
   // 显示远程桌面面板
   data.isShowRemoteDesktop = true;

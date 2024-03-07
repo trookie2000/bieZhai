@@ -13,6 +13,7 @@
     "@tauri-apps/api": "^1.0.2",
     "tauri-plugin-websocket-api": "github:tauri-apps/tauri-plugin-websocket#v1",
     "vue": "^3.2.37",
+    "vue-router": "^4.3.0",
     "ws": "^8.13.0",
     "wss": "^3.3.4"
   },
