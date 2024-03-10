@@ -46,7 +46,7 @@ onBeforeMount(async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://172.19.80.1:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://10.134.180.11:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -311,11 +311,6 @@ const remoteDesktop = async () => {
   webview.once('tauri://error', function (e) {
     // an error occurred during webview window creation
   })
-  appWindow.setFullscreen(false);
-  // 显示远程桌面面板
-  data.isShowRemoteDesktop = true;
-
-  //将下下哦i发给被远程者1
   sendToServer({
     msg_type: MessageType.REMOTE_DESKTOP,
     receiver: data.receiverAccount.id,
@@ -444,12 +439,7 @@ const sendToClient = (msg: Record<string, any>) => {
     <input v-model="data.receiverAccount.password" type="text" placeholder="请输入对方密码" />
     <button @click="remoteDesktop()">发起远程</button>
   </div>
-  <video v-show="data.isShowRemoteDesktop" @mousedown="mouseDown($event)" @mouseup="mouseUp($event)"
-    @mousemove="mouseMove($event)" @wheel="wheel($event)" @contextmenu.prevent="rightClick($event)" class="desktop"
-    ref="desktop" autoplay></video>
-  <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeRemoteDesktop()">
-    关闭
-  </button>
+
 </template>
 
 <style lang="less" scoped>
