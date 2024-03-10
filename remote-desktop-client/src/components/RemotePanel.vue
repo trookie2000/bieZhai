@@ -319,82 +319,8 @@ const remoteDesktop = async () => {
   });
 };
 
-// 关闭远程桌面
-const closeRemoteDesktop = async () => {
-  appWindow.setFullscreen(false);
-  data.isShowRemoteDesktop = false;
 
-  close();
 
-  sendToServer({
-    msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
-    receiver: data.receiverAccount.id,
-    msg: data.receiverAccount.password,
-    sender: data.account.id,
-  });
-};
-
-// 鼠标按下事件处理
-const mouseDown = (e: MouseEvent) => {
-  sendMouseEvent(e.x, e.y, mouseType(MouseStatus.MOUSE_DOWN, e.button));
-};
-
-// 鼠标松开事件处理
-const mouseUp = (e: MouseEvent) => {
-  sendMouseEvent(e.x, e.y, mouseType(MouseStatus.MOUSE_UP, e.button));
-};
-
-// 滚轮事件处理
-const wheel = (e: WheelEvent) => {
-  let type = e.deltaY > 0 ? WheelStatus.WHEEL_UP : WheelStatus.WHEEL_DOWN;
-  sendMouseEvent(e.x, e.y, type);
-};
-
-// 鼠标移动事件处理
-const mouseMove = (e: MouseEvent) => {
-  sendMouseEvent(e.x, e.y, MouseStatus.MOUSE_MOVE);
-};
-
-// 鼠标右键单击事件处理
-const rightClick = (e: MouseEvent) => {
-  sendMouseEvent(e.x, e.y, MouseStatus.RIGHT_CLICK);
-};
-
-/********************************* common *************************************/
-
-// 发送鼠标事件
-const sendMouseEvent = (x: number, y: number, eventType: string) => {
-  if (remoteDesktopDpi) {
-    let widthRatio = remoteDesktopDpi.width / desktop.value!.clientWidth;
-    let heightRatio = remoteDesktopDpi.height / desktop.value!.clientHeight;
-
-    let data = {
-      x: parseInt((x * widthRatio).toFixed(0)),
-      y: parseInt((y * heightRatio).toFixed(0)),
-      eventType: eventType,
-    };
-    sendToClient({
-      type: InputEventType.MOUSE_EVENT,
-      data: data,
-    });
-  }
-};
-
-// 获取鼠标事件类型
-const mouseType = (mouseStatus: MouseStatus, button: number) => {
-  let type = "";
-  switch (button) {
-    case 0:
-      type = "left-" + mouseStatus;
-      break;
-    case 2:
-      type = "right-" + mouseStatus;
-      break;
-    // TODO 更多的按钮
-  }
-
-  return type;
-};
 
 // 关闭远程桌面
 const close = () => {
