@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onBeforeMount, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
+import { confirm } from '@tauri-apps/api/dialog';
 import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
 // import TauriWebsocket from 'tauri-plugin-websocket-api';
 // import WebSocket from "tauri-plugin-websocket-api";
@@ -305,7 +306,9 @@ const remoteDesktop = async () => {
 
 // 关闭远程桌面
 const closeRemoteDesktop = async () => {
-  appWindow.setFullscreen(false);
+  const confirmed = await confirm('是否确认关闭', 'Tauri');
+  if(confirmed){
+    appWindow.setFullscreen(false);
   data.isShowRemoteDesktop = false;
   appWindow.close();
   close();
@@ -315,7 +318,7 @@ const closeRemoteDesktop = async () => {
     msg: data.receiverAccount.password,
     sender: data.account.id,
   });
-  
+}
 };
 
 // 鼠标按下事件处理
@@ -391,7 +394,7 @@ const close = () => {
   }
   // 关闭 Peer 连接
   pc.close();
-  
+
 };
 
 // 发送消息给服务器
@@ -412,13 +415,13 @@ onMounted(() => {
 </script>
 
 <template>
-  
+
   <!-- <div class="form">
     
     <button @click="remoteDesktop()">发起远程</button>
   </div> -->
 
-  
+
   <video v-show="data.isShowRemoteDesktop" @mousedown="mouseDown($event)" @mouseup="mouseUp($event)"
     @mousemove="mouseMove($event)" @wheel="wheel($event)" @contextmenu.prevent="rightClick($event)" class="desktop"
     ref="desktop" autoplay></video>
