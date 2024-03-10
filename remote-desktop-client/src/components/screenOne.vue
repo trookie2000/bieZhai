@@ -297,28 +297,25 @@ const sendOffer = async () => {
 
 // 请求远程桌面
 const remoteDesktop = async () => {
-
-
   appWindow.setFullscreen(false);
   // 显示远程桌面面板
   data.isShowRemoteDesktop = true;
 
- 
 };
 
 // 关闭远程桌面
 const closeRemoteDesktop = async () => {
   appWindow.setFullscreen(false);
   data.isShowRemoteDesktop = false;
-
+  appWindow.close();
   close();
-
   sendToServer({
     msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
     receiver: data.receiverAccount.id,
     msg: data.receiverAccount.password,
     sender: data.account.id,
   });
+  
 };
 
 // 鼠标按下事件处理
@@ -394,6 +391,7 @@ const close = () => {
   }
   // 关闭 Peer 连接
   pc.close();
+  
 };
 
 // 发送消息给服务器
