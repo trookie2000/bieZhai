@@ -301,16 +301,23 @@ const remoteDesktop = async () => {
     alert("请输入ID和密码");
     return;
   }
-  const webview = new WebviewWindow('theUniqueLabel', {
+
+  // Create a unique label for each webview
+  const uniqueLabel = `webview_${Date.now()}`;
+
+  const webview = new WebviewWindow(uniqueLabel, {
     url: '#/screenOne',
-  })
+  });
 
   webview.once('tauri://created', function () {
+    // Webview created successfully
+  });
 
-  })
   webview.once('tauri://error', function (e) {
-    // an error occurred during webview window creation
-  })
+    // An error occurred during webview window creation
+    console.error('Webview error:', e);
+  });
+
   sendToServer({
     msg_type: MessageType.REMOTE_DESKTOP,
     receiver: data.receiverAccount.id,
@@ -318,7 +325,6 @@ const remoteDesktop = async () => {
     sender: data.account.id,
   });
 };
-
 
 
 

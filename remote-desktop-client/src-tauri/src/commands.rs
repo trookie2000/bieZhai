@@ -1,38 +1,27 @@
-// 导入必要的库和模块
-
 use serde::Serialize;
 use tauri::command;
-
-// 导入 Enigo 库中的鼠标和键盘控制相关内容
 use enigo::{Enigo, MouseButton, MouseControllable};
 use enigo::{Key, KeyboardControllable};
 use uuid::Uuid;
 use mac_address::MacAddress;
-
-// 导入随机数生成库
 use rand::Rng;
-
-// 导入包含键映射的 KEYMAP
 use crate::KEYMAP;
 
-// 定义一个序列化结构体 Account，用于生成账号信息
+
 #[derive(Serialize)]
 pub struct Account {
     id: String,
     password: String,
 }
 
-// 生成账号信息的命令函数
-#[command]
 
+#[command]
 pub fn generate_account() -> Account {
-    // 生成唯一标识符 UUID
-    let uuid = Uuid::new_v4();
     let mac_result = mac_address::get_mac_address();
     let id = if let Ok(Some(mac)) = mac_result {
         mac.to_string()
     } else {
-        String::from("Unknown") // 处理无法获取 MAC 地址的情况
+        String::from("Unknown")
     };
     let mac_result = mac_address::get_mac_address();
     let mut password = String::new();
@@ -40,15 +29,9 @@ pub fn generate_account() -> Account {
     if let Ok(Some(mac)) = mac_result{
         println!("MAC address: {:?}", mac.to_string());
     }
-    // let mac_result = mac_address::get_mac_address();
-    // if let Ok(Some(mac)) = mac_result{
-    //     println!("MAC address: {:?}", mac.to_string());
-    // }
-
     let mut random = rand::thread_rng();
-
     let mut i = 0;
-    while i < 8 {
+    while i < 2 {
         let num = random.gen_range(0..10);
         password.push_str(&num.to_string());
         i += 1;

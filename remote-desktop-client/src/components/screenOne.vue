@@ -306,7 +306,7 @@ const remoteDesktop = async () => {
 
 // 关闭远程桌面
 const closeRemoteDesktop = async () => {
-  const confirmed = await confirm('是否确认关闭', 'Tauri');
+  const confirmed = await confirm('是否确认关闭', '提示');
   if(confirmed){
     appWindow.setFullscreen(false);
   data.isShowRemoteDesktop = false;
