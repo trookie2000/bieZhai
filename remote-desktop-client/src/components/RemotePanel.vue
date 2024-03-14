@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onBeforeMount } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
+import { confirm } from '@tauri-apps/api/dialog';
 import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
 // import TauriWebsocket from 'tauri-plugin-websocket-api';
 // import WebSocket from "tauri-plugin-websocket-api";
@@ -329,20 +330,41 @@ const remoteDesktop = async () => {
   });
 };
 
-
+// 关闭远程桌面
+const closeRemoteDesktop = async () => {
+  const confirmed = await confirm('确认结束被控？', '提示');
+  if(confirmed){
+    appWindow.setFullscreen(false);
+  data.isShowRemoteDesktop = false;
+  appWindow.close();
+  close();
+  sendToServer({
+    msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
+    receiver: data.receiverAccount.id,
+    msg: data.receiverAccount.password,
+    sender: data.account.id,
+  });
+}
+};
 
 // 关闭远程桌面
 const close = () => {
-  if (desktop.value!.srcObject) {
-    const tracks = desktop.value!.srcObject as MediaStream;
-    tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-    desktop.value!.srcObject = null;
+  // 检查 desktop.value 是否存在
+  if (desktop.value) {
+    if (desktop.value.srcObject) {
+      const tracks = desktop.value.srcObject as MediaStream;
+      tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+      desktop.value.srcObject = null;
+    }
   } else {
-    webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+    if (webcamStream) {
+      webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+    }
   }
   // 关闭 Peer 连接
   pc.close();
 };
+
 
 // 发送消息给服务器
 const sendToServer = (msg: Record<string, any>) => {
@@ -361,7 +383,9 @@ const sendToClient = (msg: Record<string, any>) => {
 <template>
  
  <div v-if="data.isConnecting" class="connecting-message sidebarr" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0;">正在被远控...</div>
-
+ <button v-if="data.isConnecting" class="close-btn" @click="closeRemoteDesktop()">
+  结束被控
+</button>
   <div v-if="!data.isConnecting" class="sidebar">
     <div>
       <p>
@@ -496,7 +520,7 @@ button {
 }
 
 .close-btn {
-  width: 40px;
+  width: 60px;
   height: 24px;
   position: fixed;
   right: 20px;
