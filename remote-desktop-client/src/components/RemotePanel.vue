@@ -23,6 +23,7 @@ const data = reactive({
     password: "",
   },
   isShowRemoteDesktop: false,
+  isConnecting: false, //连接状态
 });
 
 // 对象用于引用视频元素，DOM对象s
@@ -63,7 +64,7 @@ const initWebSocket = () => {
   ws.onmessage = async (e: MessageEvent) => {
     const msg: Record<string, any> = JSON.parse(e.data);
     switch (msg.msg_type) {
-      case MessageType.VIDEO_OFFER: // 视频通话邀请
+      case MessageType.VIDEO_OFFER: // 视频通话邀请s
         handleVideoOfferMsg(msg);
         break;
       case MessageType.VIDEO_ANSWER: // 对方已接受邀请
@@ -250,6 +251,7 @@ const initRTCDataChannel = () => {
 
   //计算分辨率，鼠标属于哪个位置
   dc.onopen = (e: Event) => {
+    data.isConnecting = true;
     console.log("数据通道已打开");
     dc.send(
       JSON.stringify({
@@ -273,6 +275,7 @@ const initRTCDataChannel = () => {
   };
 
   dc.onclose = (e: Event) => {
+    data.isConnecting = false;
     console.log("数据通道已关闭");
   };
 
@@ -356,7 +359,10 @@ const sendToClient = (msg: Record<string, any>) => {
 </script>
 
 <template>
-  <div class="sidebar">
+ 
+ <div v-if="data.isConnecting" class="connecting-message sidebarr" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0;">正在被远控...</div>
+
+  <div v-if="!data.isConnecting" class="sidebar">
     <div>
       <p>
         address: <span>{{ data.account.id }}</span>
@@ -365,13 +371,16 @@ const sendToClient = (msg: Record<string, any>) => {
         password: <span>{{ data.account.password }}</span>
       </p>
     </div>
-  </div>
-  <div class="form">
+    </div>
+ 
+  
+  <div v-if="!data.isConnecting" class="form">
     <input v-model="data.receiverAccount.id" type="text" placeholder="请输入对方id" />
     <input v-model="data.receiverAccount.password" type="text" placeholder="请输入对方密码" />
     <button @click="remoteDesktop()">发起远程</button>
+    
   </div>
-
+  
 </template>
 
 <style lang="less" scoped>
@@ -403,7 +412,46 @@ const sendToClient = (msg: Record<string, any>) => {
     }
   }
 }
+.sidebarr {
+  width: 100%;
+  height: 160px;
+  background: #1b1b1c;
+  color: #fafafa;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-bottom: 1px solid #252525;
+  box-sizing: border-box;
+  >div {
+    background: #242425;
+    padding: 10px 20px;
+    border-radius: 10px;
 
+    p {
+      line-height: 28px;
+      font-size: 16px;
+
+      span {
+        font-size: 18px;
+        font-weight: 600;
+      }
+    }
+  }
+}
+.connecting-message {
+  position: fixed; 
+  top: 0; 
+  left: 0; 
+  width: 100%; 
+  height: 100%; 
+  background: #1b1b1c; 
+  color: #fff;
+  display: flex;
+  justify-content: center; 
+  align-items: center; 
+  font-size: 24px; 
+}
 .form {
   height: calc(100% - 160px);
   display: flex;

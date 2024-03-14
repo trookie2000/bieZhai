@@ -1390,7 +1390,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "乱杀秋刀鱼"
+name = "多端远控"
 version = "0.1.0"
 dependencies = [
  "actix",

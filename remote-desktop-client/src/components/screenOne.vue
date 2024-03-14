@@ -24,6 +24,7 @@ const data = reactive({
     password: "",
   },
   isShowRemoteDesktop: false,
+  isConnecting: false, //连接状态
 });
 
 // 对象用于引用视频元素，DOM对象s
@@ -123,31 +124,36 @@ const handleNewICECandidateMsg = async (msg: Record<string, any>) => {
 
 // 处理远程桌面请求消息
 const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
-  if (msg.msg != data.account.password) {
-    console.log("密码错误！");
-    return;
-  }
+    try {
+        if (msg.msg != data.account.password) {
+            console.log("密码错误！");
+            return;
+        }
 
-  data.receiverAccount.id = msg.sender;
+        data.receiverAccount.id = msg.sender;
+        
 
-  await initRTCPeerConnection();
+        await initRTCPeerConnection();
 
-  initRTCDataChannel();
+        initRTCDataChannel();
 
-  // 获取本地桌面流s
-  webcamStream = await navigator.mediaDevices.getDisplayMedia({
-    video: true,
-    audio: false,
-  });
+        // 获取本地桌面流
+        webcamStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: false,
+        });
 
+        webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
+            pc.addTrack(track, webcamStream)
+        );
 
-  webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
-    pc.addTrack(track, webcamStream)
-  );
-
-  sendOffer();
+        sendOffer();
+    } catch (error) {
+        console.error("处理远程桌面请求时出错:", error);
+        // 在发生错误时需要重置连接状态
+        data.isConnecting = false;
+    }
 };
-
 // 初始化 RTCPeerConnections
 const initRTCPeerConnection = () => {
   const iceServer: object = {
@@ -227,6 +233,7 @@ const handleTrackEvent = (event: RTCTrackEvent) => {
 
 // 数据通道事件处理
 const handleDataChannel = (e: RTCDataChannelEvent) => {
+  data.isConnecting = false;
   dc = e.channel;
   dc.onopen = (e: Event) => {
     console.log("数据通道已打开");
@@ -300,8 +307,11 @@ const sendOffer = async () => {
 const remoteDesktop = async () => {
   appWindow.setFullscreen(false);
   // 显示远程桌面面板
-  data.isShowRemoteDesktop = true;
-
+  data.isConnecting = true;
+  setTimeout(() => {
+    data.isShowRemoteDesktop = true;
+  }, 0);
+  
 };
 
 // 关闭远程桌面
@@ -421,17 +431,23 @@ onMounted(() => {
     <button @click="remoteDesktop()">发起远程</button>
   </div> -->
 
-
-  <video v-show="data.isShowRemoteDesktop" @mousedown="mouseDown($event)" @mouseup="mouseUp($event)"
+     <!-- 显示连接状态的提示信息 -->
+     <div class="sidebarr">
+     <div v-if="data.isConnecting" class="connecting-message">正在连接中，请稍候...</div>
+    
+  <video v-show="data.isShowRemoteDesktop " @mousedown="mouseDown($event)" @mouseup="mouseUp($event)"
     @mousemove="mouseMove($event)" @wheel="wheel($event)" @contextmenu.prevent="rightClick($event)" class="desktop"
     ref="desktop" autoplay></video>
+  </div>
   <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeRemoteDesktop()">
     关闭
   </button>
+
 </template>
 
 <style lang="less" scoped>
-.sidebar {
+
+.sidebarr {
   width: 100%;
   height: 160px;
   background: #1b1b1c;
@@ -442,7 +458,6 @@ onMounted(() => {
   align-items: center;
   border-bottom: 1px solid #252525;
   box-sizing: border-box;
-
   >div {
     background: #242425;
     padding: 10px 20px;
@@ -459,7 +474,12 @@ onMounted(() => {
     }
   }
 }
-
+.connecting-message {
+  position: absolute; /* 相对于包含块定位 */
+  top: 2000;
+  left: 1000;
+  z-index: 1; /* 将其放置在堆叠顺序的最上方 */
+}
 .form {
   height: calc(100% - 160px);
   display: flex;
