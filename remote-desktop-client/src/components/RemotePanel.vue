@@ -336,7 +336,7 @@ const closeRemoteDesktop = async () => {
   if(confirmed){
     appWindow.setFullscreen(false);
   data.isShowRemoteDesktop = false;
-  appWindow.close();
+
   close();
   sendToServer({
     msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
