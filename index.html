@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>WebRTC PiP示例</title>
+</head>
+<body>
+	<video id="mainVideo" controls autoplay></video>
+	<video id="pipVideo" controls></video>
+
+	<script>
+	// 获取媒体流
+	navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+		.then(function(stream) {
+			var mainVideo = document.getElementById("mainVideo");
+			mainVideo.srcObject = stream;
+			mainVideo.onloadedmetadata = function(e) {
+				mainVideo.play();
+			};
+		})
+		.catch(function(err) {
+			console.log(err.name + ": " + err.message);
+		});
+
+	// 开启画中画功能
+	var pipVideo = document.getElementById("pipVideo");
+	var mainVideo = document.getElementById("mainVideo");
+
+	if ('pictureInPictureEnabled' in document) {
+		pipVideo.addEventListener("enterpictureinpicture", function(event) {
+			console.log("进入画中画模式");
+		});
+
+		pipVideo.addEventListener("leavepictureinpicture", function(event) {
+			console.log("离开画中画模式");
+		});
+
+		mainVideo.addEventListener("pause", function(event) {
+			if (pipVideo !== document.pictureInPictureElement) {
+				pipVideo.srcObject = mainVideo.srcObject;
+				pipVideo.play();
+			}
+		});
+
+		mainVideo.addEventListener("play", function(event) {
+			if (pipVideo === document.pictureInPictureElement) {
+				document.exitPictureInPicture();
+			}
+		});
+
+		pipVideo.addEventListener("click", function(event) {
+			if (document.pictureInPictureElement) {
+				document.exitPictureInPicture();
+			} else {
+				pipVideo.requestPictureInPicture();
+			}
+		});
+	} else {
+		console.log("画中画功能不可用");
+	}
+	</script>
+</body>
+</html>

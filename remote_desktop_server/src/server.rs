@@ -30,7 +30,7 @@ impl ChatServer {
     fn send_message(&self, msg_type: String, receiver: String, message: String) {
         match msg_type.as_str() {
             "heartbeat" => {
-                println!("已接受到新用户");
+                // println!("");
             }
             _ => {
                 if let Some(addr) = self.sessions.get(&receiver) {
@@ -102,7 +102,7 @@ impl Handler<ClientMessage> for ChatServer {
         let msg_type = msg.msg_type.clone();
         match msg_type.as_str() {
             "heartbeat" => {
-                println!("心跳。")
+                println!("已接受到新用户")
             }
             _ => {
                 let receiver = msg.receiver.clone();

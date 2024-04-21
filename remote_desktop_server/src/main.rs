@@ -16,7 +16,7 @@ async fn chat_route(
 ) -> Result<HttpResponse, Error> {
     let path = req.path();
 
-    // 从路径中提取 uuid
+    
     let uuid = &path[6..path.len()];
 
     // 启动 WebSocket 连接，使用 session::MyWs 实现
@@ -37,15 +37,14 @@ async fn chat_route(
 async fn main() -> std::io::Result<()> {
     use actix_web::{App, HttpServer};
 
-    // 启动聊天服务器 actor
     let server = server::ChatServer::new().start();
 
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(server.clone()))
-            .route("/conn/{account}", web::get().to(chat_route)) // 设置路由规则
+            .route("/conn/{account}", web::get().to(chat_route))
     })
-    .bind(("0.0.0.0", 8081))? // 绑定地址和端口
-    .run() // 启动服务器
-    .await // 等待服务器运行完成
+    .bind(("0.0.0.0", 8081))? 
+    .run() 
+    .await 
 }
