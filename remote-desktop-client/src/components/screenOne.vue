@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onBeforeMount, onMounted, nextTick } from "vue";
+import { ref, reactive, onBeforeMount, onMounted, nextTick, watch, onBeforeUnmount } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
 import { confirm } from '@tauri-apps/api/dialog';
 import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
@@ -48,7 +48,7 @@ onBeforeMount(async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://10.134.130.12:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://10.134.169.24:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -323,6 +323,16 @@ const closeRemoteDesktop = async () => {
     });
   }
 };
+const closeVideo = (index) => {
+  // 停止视频流
+  const video = videos[index].stream;
+  if (video) {
+    video.getTracks().forEach(track => track.stop());
+  }
+  // 从数组中移除该视频
+  videos.splice(index, 1);
+};
+
 
 // 鼠标事件处理改动，传递事件对象和视频元素
 const mouseDown = (e, videoElement) => {
@@ -342,10 +352,6 @@ const wheel = (e, videoElement) => {
   sendMouseEvent(e, videoElement, type);
 };
 
-const rightClick = (e, videoElement) => {
-  e.preventDefault();  // 阻止默认的右键菜单
-  sendMouseEvent(e, videoElement, MouseStatus.RIGHT_CLICK);
-};
 
 // 更新后的 sendMouseEvent 函数
 const sendMouseEvent = (e, videoElement, eventType) => {
@@ -424,32 +430,99 @@ const addVideo = (stream) => {
   videos.push(videoObj);
 };
 
-function toggleFullScreen(index) {
-  const videoElement = videos[index].stream;
-  if (!document.fullscreenElement && videoElement) {
-    videoElement.requestFullscreen().catch(err => {
+const toggleFullScreen = (videoElement, video, index) => {
+  if (!document.fullscreenElement) {
+    videoElement.requestFullscreen().then(() => {
+      videos[index].isFullscreen = true;  // 设置全屏标志
+      handleFullscreenChange(); // 触发全屏状态变化处理函数
+    }).catch(err => {
       console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
     });
   } else {
-    if (document.fullscreenElement === videoElement) {
-      document.exitFullscreen();
-    }
+    document.exitFullscreen().then(() => {
+      videos.forEach(v => v.isFullscreen = false);  // 清除所有全屏标志
+      handleFullscreenChange(); // 触发全屏状态变化处理函数
+    }).catch(err => {
+      console.error(`Error attempting to disable full-screen mode: ${err.message} (${err.name})`);
+    });
   }
+};
+
+
+// const handleClick(event, video) => {
+//       if (video.paused) {
+//         video.play(); // 如果视频暂停，则播放视频
+//       }
+//     },
+// 添加变量用于跟踪视频是否在全屏模式下
+const isVideoFullscreen = ref(false);
+
+// 监听视频全屏状态变化
+document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+// 处理视频全屏状态变化
+function handleFullscreenChange() {
+  isVideoFullscreen.value = document.fullscreenElement !== null;
+
+  // 更新按钮位置和样式
+  const buttons = document.querySelectorAll('.close-btn');
+  buttons.forEach(button => {
+    if (isVideoFullscreen.value) {
+      button.style.bottom = '20px';
+      button.style.right = '20px';
+    } else {
+      button.style.bottom = '5%';
+      button.style.right = '5%';
+    }
+  });
+}
+
+document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+// 调整按钮位置以适应全屏模式
+function adjustButtonPositionForFullscreen() {
+  const buttons = document.querySelectorAll('.close-btn');
+  buttons.forEach(button => {
+    button.style.bottom = '5%';
+    button.style.right = '5%';
+    button.style.transform = 'translate(50%, 50%)';
+  });
+}
+
+// 从全屏模式恢复按钮位置
+function restoreButtonPositionFromFullscreen() {
+  const buttons = document.querySelectorAll('.close-btn');
+  buttons.forEach(button => {
+    button.style.bottom = '';
+    button.style.right = '';
+    button.style.transform = '';
+  });
 }
 onMounted(() => {
   remoteDesktop(); // 在组件挂载时调用 remoteDesktop 方法
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
 });
 </script>
 <template>
   <div class="container">
     <div class="video-grid">
-      <div v-for="(video, index) in videos" :key="video.id" class="video-container" @click="setActiveVideo(video.id)">
-        <video class="video" ref="videoElements"
-          :srcObject="video.stream" controls autoplay @mousedown="e => mouseDown(e, $refs.videoElements[index])"
-          @mouseup="e => mouseUp(e, $refs.videoElements[index])"
-          @mousemove="e => mouseMove(e, $refs.videoElements[index])" @wheel="e => wheel(e, $refs.videoElements[index])"
-          @contextmenu.prevent="e => rightClick(e, $refs.videoElements[index])">
-        </video>
+      <div v-for="(video, index) in videos" :key="video.id" class="video-container"
+        :class="{ 'fullscreen': video.isFullscreen }" @click="setActiveVideo(video.id)">
+        <div class="video-wrapper">
+          <video class="video" ref="videoElements" :srcObject="video.stream" autoplay controls
+            @mousedown="e => mouseDown(e, $refs.videoElements[index])"
+            @mouseup="e => mouseUp(e, $refs.videoElements[index])"
+            @mousemove="e => mouseMove(e, $refs.videoElements[index])"
+            @wheel="e => wheel(e, $refs.videoElements[index])"
+            @contextmenu.prevent="e => rightClick(e, $refs.videoElements[index])"
+            @dblclick="e => toggleFullScreen($refs.videoElements[index], video, index)" 
+            x5-video-player-type="h5-page"></video>
+          <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeVideo(index)">
+            关闭
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -457,19 +530,10 @@ onMounted(() => {
 
 
 
+
 <style lang="less" scoped>
 .container {
   display: flex;
-}
-
-.sidebar {
-  width: 200px;
-  background-color: #f4f4f4;
-  padding: 10px;
-}
-
-.main-content {
-  flex-grow: 1;
 }
 
 .video-grid {
@@ -481,47 +545,68 @@ onMounted(() => {
 .video-container {
   position: relative;
   width: 100%;
-  padding-top: 56.25%;
-  /* 16:9 Aspect Ratio */
+}
+
+.video-wrapper {
+  position: relative;
+  width: 100%;
 }
 
 video {
-  position: absolute;
+  display: block;
   width: 100%;
-  height: 100%;
-  top: 0;
-  left: 0;
-  
+  height: auto;
 }
 
+.close-btn {
+  position: absolute;
+  z-index: 999;
+  background: #d71526;
+  font-size: 12px;
+  bottom: 5%;
+  right: 5%;
+}
+
+.close-btn.fullscreen {
+  bottom: 20px;
+  right: 20px;
+  transform: translate(50%, 50%);
+}
 
 /* 隐藏video 播放按钮 */
+/* 
 .video::-webkit-media-controls-play-button {
-	display: none;
+  pointer-events: none; 
 }
-/* 隐藏video 进度条 */
-.video::-webkit-media-controls-timeline {
-	display: none;
+.video::-webkit-media-controls-start-playback-button {
+  pointer-events: none; 
+}
+.video::-webkit-media-controls-enclosure { 
+  pointer-events: none; 
 }
 
-.video::-webkit-media-controls-current-time-display{
-display: none;            
+.video::-webkit-media-controls-timeline {
+  display: none;
 }
-/* 隐藏video 剩余时间 */
+
+.video::-webkit-media-controls-current-time-display {
+  display: none;            
+}
+
 .video::-webkit-media-controls-time-remaining-display {
-display: none;            
+  display: none;            
 }
-/* 隐藏video 音量按钮 */
+
 .video::-webkit-media-controls-mute-button {
-display: none;            
+  display: none;            
 }
 .video::-webkit-media-controls-toggle-closed-captions-button {
-display: none;            
+  display: none;            
 }
-/* 隐藏video 音量的控制条 */
+
 .video::-webkit-media-controls-volume-slider {
-display: none;            
+  display: none;            
 }
 
-
+*/
 </style>

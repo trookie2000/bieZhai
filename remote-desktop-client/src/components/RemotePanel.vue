@@ -48,7 +48,7 @@ onBeforeMount(async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://10.134.130.12:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://10.134.169.24:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
