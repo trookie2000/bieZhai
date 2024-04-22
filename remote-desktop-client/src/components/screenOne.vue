@@ -444,7 +444,7 @@ onMounted(() => {
   <div class="container">
     <div class="video-grid">
       <div v-for="(video, index) in videos" :key="video.id" class="video-container" @click="setActiveVideo(video.id)">
-        <video ref="videoElements"
+        <video class="video" ref="videoElements"
           :srcObject="video.stream" controls autoplay @mousedown="e => mouseDown(e, $refs.videoElements[index])"
           @mouseup="e => mouseUp(e, $refs.videoElements[index])"
           @mousemove="e => mouseMove(e, $refs.videoElements[index])" @wheel="e => wheel(e, $refs.videoElements[index])"
@@ -491,5 +491,37 @@ video {
   height: 100%;
   top: 0;
   left: 0;
+  
 }
+
+
+/* 隐藏video 播放按钮 */
+.video::-webkit-media-controls-play-button {
+	display: none;
+}
+/* 隐藏video 进度条 */
+.video::-webkit-media-controls-timeline {
+	display: none;
+}
+
+.video::-webkit-media-controls-current-time-display{
+display: none;            
+}
+/* 隐藏video 剩余时间 */
+.video::-webkit-media-controls-time-remaining-display {
+display: none;            
+}
+/* 隐藏video 音量按钮 */
+.video::-webkit-media-controls-mute-button {
+display: none;            
+}
+.video::-webkit-media-controls-toggle-closed-captions-button {
+display: none;            
+}
+/* 隐藏video 音量的控制条 */
+.video::-webkit-media-controls-volume-slider {
+display: none;            
+}
+
+
 </style>
