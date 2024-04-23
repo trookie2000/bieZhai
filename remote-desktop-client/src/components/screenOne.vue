@@ -1,3 +1,4 @@
+
 <script setup lang="ts">
 import { ref, reactive, onBeforeMount, onMounted, nextTick, watch, onBeforeUnmount } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
@@ -57,6 +58,7 @@ const initWebSocket = () => {
         msg_type: "heartbeat",
         receiver: "",
         sender: "",
+        // videoId:"",
         msg: "",
       });
     }, 1000 * 60);
@@ -323,14 +325,29 @@ const closeRemoteDesktop = async () => {
     });
   }
 };
-const closeVideo = (index) => {
+const closeVideo = (video) => {
+  console.log("Closing video with ID:", video.id);
+
   // 停止视频流
-  const video = videos[index].stream;
-  if (video) {
-    video.getTracks().forEach(track => track.stop());
+  const videoStream = video.stream;
+  if (videoStream) {
+    videoStream.getTracks().forEach(track => {
+      console.log("Stopping track:", track.id);
+      track.stop();  // 停止该流的所有轨道
+    });
   }
-  // 从数组中移除该视频
-  videos.splice(index, 1);
+  
+  // 从数组中移除该视频对象
+  const index = videos.findIndex(v => v.id === video.id);
+  if (index !== -1) {
+    videos.splice(index, 1);
+    sendToServer({
+      msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
+      receiver: video.id,
+      msg: data.receiverAccount.password,
+      sender: data.account.id,
+    });
+  }
 };
 
 
@@ -424,12 +441,12 @@ const setActiveVideo = (index) => {
 
 const addVideo = (stream) => {
   const videoObj = {
+    id: Date.now().toString(), // 使用时间戳生成唯一ID
     stream,
     name: `Video ${videos.length + 1}`
   };
   videos.push(videoObj);
 };
-
 const toggleFullScreen = (videoElement, video, index) => {
   if (!document.fullscreenElement) {
     videoElement.requestFullscreen().then(() => {
@@ -509,9 +526,9 @@ onBeforeUnmount(() => {
   <div class="container">
     <div class="video-grid">
       <div v-for="(video, index) in videos" :key="video.id" class="video-container"
-        :class="{ 'fullscreen': video.isFullscreen }" @click="setActiveVideo(video.id)">
+        :class="{ 'fullscreen': video.isFullscreen }" @click="setActiveVideo(index)">
         <div class="video-wrapper">
-          <video class="video" ref="videoElements" :srcObject="video.stream" autoplay controls
+          <video v-show="data.isShowRemoteDesktop " class="video" ref="videoElements" :srcObject="video.stream" autoplay controls
             @mousedown="e => mouseDown(e, $refs.videoElements[index])"
             @mouseup="e => mouseUp(e, $refs.videoElements[index])"
             @mousemove="e => mouseMove(e, $refs.videoElements[index])"
@@ -519,7 +536,7 @@ onBeforeUnmount(() => {
             @contextmenu.prevent="e => rightClick(e, $refs.videoElements[index])"
             @dblclick="e => toggleFullScreen($refs.videoElements[index], video, index)" 
             x5-video-player-type="h5-page"></video>
-          <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeVideo(index)">
+          <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeVideo(video)">
             关闭
           </button>
         </div>
@@ -527,8 +544,6 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-
-
 
 
 <style lang="less" scoped>
