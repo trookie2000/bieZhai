@@ -309,22 +309,22 @@ const remoteDesktop = async () => {
   }, 0);
 };
 
-// 关闭远程桌面
-const closeRemoteDesktop = async () => {
-  const confirmed = await confirm('是否确认关闭', '提示');
-  if (confirmed) {
-    appWindow.setFullscreen(false);
-    data.isShowRemoteDesktop = false;
-    appWindow.close();
-    close();
-    sendToServer({
-      msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
-      receiver: data.receiverAccount.id,
-      msg: data.receiverAccount.password,
-      sender: data.account.id,
-    });
-  }
-};
+// // 关闭远程桌面
+// const closeRemoteDesktop = async () => {
+//   const confirmed = await confirm('是否确认关闭', '提示');
+//   if (confirmed) {
+//     appWindow.setFullscreen(false);
+//     data.isShowRemoteDesktop = false;
+//     appWindow.close();
+//     close();
+//     sendToServer({
+//       msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
+//       receiver: data.receiverAccount.id,
+//       msg: data.receiverAccount.password,
+//       sender: data.account.id,
+//     });
+//   }
+// };
 const closeVideo = (video) => {
   console.log("Closing video with ID:", video.id);
 
@@ -332,7 +332,7 @@ const closeVideo = (video) => {
   const videoStream = video.stream;
   if (videoStream) {
     videoStream.getTracks().forEach(track => {
-      console.log("Stopping track:", track.id);
+      console.log("Stopping track:", video.id);
       track.stop();  // 停止该流的所有轨道
     });
   }
@@ -343,7 +343,7 @@ const closeVideo = (video) => {
     videos.splice(index, 1);
     sendToServer({
       msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
-      receiver: video.id,
+      receiver: data.receiverAccount.id,
       msg: data.receiverAccount.password,
       sender: data.account.id,
     });
