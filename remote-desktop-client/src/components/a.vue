@@ -1,10 +1,10 @@
+
 <script setup lang="ts">
-import { ref, reactive, onBeforeMount } from "vue";
+import { ref, reactive, onBeforeMount, onMounted, nextTick, watch, onBeforeUnmount } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
 import { confirm } from '@tauri-apps/api/dialog';
 import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
-// import TauriWebsocket from 'tauri-plugin-websocket-api';
-// import WebSocket from "tauri-plugin-websocket-api";
+
 import {
   MouseStatus,
   WheelStatus,
@@ -13,6 +13,7 @@ import {
   InputEventType,
 } from "../common/Constans";
 import { handleKeyboardEvent, handleMouseEvent } from "../common/InputEvent";
+
 // 用于存储响应式数据的对象
 const data = reactive({
   account: {
@@ -57,6 +58,7 @@ const initWebSocket = () => {
         msg_type: "heartbeat",
         receiver: "",
         sender: "",
+        // videoId:"",
         msg: "",
       });
     }, 1000 * 60);
@@ -65,7 +67,7 @@ const initWebSocket = () => {
   ws.onmessage = async (e: MessageEvent) => {
     const msg: Record<string, any> = JSON.parse(e.data);
     switch (msg.msg_type) {
-      case MessageType.VIDEO_OFFER: // 视频通话邀请s
+      case MessageType.VIDEO_OFFER: // 视频通话邀请
         handleVideoOfferMsg(msg);
         break;
       case MessageType.VIDEO_ANSWER: // 对方已接受邀请
@@ -78,8 +80,7 @@ const initWebSocket = () => {
         handleRemoteDesktopRequest(msg);
         break;
       case MessageType.CLOSE_REMOTE_DESKTOP:
-        const videoId = msg.receiver; // 假设消息中包含了需要关闭的视频 ID
-        closeVideoStreamById(videoId); // 调用函数来关闭特定 ID 的视频流
+        close();
         break;
     }
   };
@@ -125,31 +126,36 @@ const handleNewICECandidateMsg = async (msg: Record<string, any>) => {
 
 // 处理远程桌面请求消息
 const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
-  if (msg.msg != data.account.password) {
-    console.log("密码错误！");
-    return;
+  try {
+    if (msg.msg != data.account.password) {
+      console.log("密码错误！");
+      return;
+    }
+
+    data.receiverAccount.id = msg.sender;
+
+
+    await initRTCPeerConnection();
+
+    initRTCDataChannel();
+
+    // 获取本地桌面流
+    webcamStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false,
+    });
+
+    webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
+      pc.addTrack(track, webcamStream)
+    );
+
+    sendOffer();
+  } catch (error) {
+    console.error("处理远程桌面请求时出错:", error);
+    // 在发生错误时需要重置连接状态
+    data.isConnecting = false;
   }
-
-  data.receiverAccount.id = msg.sender;
-
-  await initRTCPeerConnection();
-
-  initRTCDataChannel();
-
-  // 获取本地桌面流s
-  webcamStream = await navigator.mediaDevices.getDisplayMedia({
-    video: true,
-    audio: false,
-  });
-
-
-  webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
-    pc.addTrack(track, webcamStream)
-  );
-
-  sendOffer();
 };
-
 // 初始化 RTCPeerConnections
 const initRTCPeerConnection = () => {
   const iceServer: object = {
@@ -203,32 +209,27 @@ const handleSignalingStateChangeEvent = (event: Event) => {
 };
 
 // 获取数据流事件处理
-const handleTrackEvent = (event: RTCTrackEvent) => {
-  desktop.value!.srcObject = event.streams[0];
+// 处理新视频流事件
+const handleTrackEvent = (event) => {
+  const stream = event.streams[0];
+  addVideo(stream, `Video ${videos.length + 1}`);
 
-  document.onkeydown = (e: KeyboardEvent) => {
-    sendToClient({
-      type: InputEventType.KEY_EVENT,
-      data: {
-        eventType: KeyboardStatus.MOUSE_DOWN,
-        key: e.key,
-      },
-    });
-  };
-
-  document.onkeyup = (e: KeyboardEvent) => {
-    sendToClient({
-      type: InputEventType.KEY_EVENT,
-      data: {
-        eventType: KeyboardStatus.MOUSE_UP,
-        key: e.key,
-      },
-    });
-  };
+  // 使用 nextTick 来确保 DOM 更新
+  nextTick(() => {
+    const elems = videoElements.value; // 确保你有正确的 ref 指向视频元素数组
+    const elem = elems[elems.length - 1];
+    if (elem) {
+      elem.srcObject = stream;
+    } else {
+      console.error('Video element not found');
+    }
+  });
 };
+
 
 // 数据通道事件处理
 const handleDataChannel = (e: RTCDataChannelEvent) => {
+  data.isConnecting = false;
   dc = e.channel;
   dc.onopen = (e: Event) => {
     console.log("数据通道已打开");
@@ -253,7 +254,6 @@ const initRTCDataChannel = () => {
 
   //计算分辨率，鼠标属于哪个位置
   dc.onopen = (e: Event) => {
-    data.isConnecting = true;
     console.log("数据通道已打开");
     dc.send(
       JSON.stringify({
@@ -277,14 +277,13 @@ const initRTCDataChannel = () => {
   };
 
   dc.onclose = (e: Event) => {
-    data.isConnecting = false;
     console.log("数据通道已关闭");
   };
 
   console.log("数据通道:", dc);
 };
 
-// 发送视频通话邀请
+// 发送共享桌面邀请
 const sendOffer = async () => {
   const offer = await pc.createOffer();
 
@@ -302,44 +301,46 @@ const sendOffer = async () => {
 
 // 请求远程桌面
 const remoteDesktop = async () => {
-  if (!data.receiverAccount.id || !data.receiverAccount.password) {
-    alert("请输入ID和密码");
-    return;
-  }
-
-  // Create a unique label for each webview
-  const uniqueLabel = `webview_${Date.now()}`;
-
-  const webview = new WebviewWindow("1", {
-    url: '#/screenOne',
-  });
-
-  webview.once('tauri://created', function () {
-    // Webview created successfully
-  });
-
-  webview.once('tauri://error', function (e) {
-    // An error occurred during webview window creation
-    console.error('Webview error:', e);
-  });
-
-  sendToServer({
-    msg_type: MessageType.REMOTE_DESKTOP,
-    receiver: data.receiverAccount.id,
-    msg: data.receiverAccount.password,
-    sender: data.account.id,
-  });
+  appWindow.setFullscreen(false);
+  // 显示远程桌面面板
+  data.isConnecting = true;
+  setTimeout(() => {
+    data.isShowRemoteDesktop = true;
+  }, 0);
 };
-const videos = reactive([]);
-// 关闭远程桌面
 
-const closeRemoteDesktop = async () => {
-  const confirmed = await confirm('确认结束被控？', '提示');
-  if (confirmed) {
-    appWindow.setFullscreen(false);
-    data.isShowRemoteDesktop = false;
-    appWindow.close()
-    close();
+// // 关闭远程桌面
+// const closeRemoteDesktop = async () => {
+//   const confirmed = await confirm('是否确认关闭', '提示');
+//   if (confirmed) {
+//     appWindow.setFullscreen(false);
+//     data.isShowRemoteDesktop = false;
+//     appWindow.close();
+//     close();
+//     sendToServer({
+//       msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
+//       receiver: data.receiverAccount.id,
+//       msg: data.receiverAccount.password,
+//       sender: data.account.id,
+//     });
+//   }
+// };
+const closeVideo = (video) => {
+  console.log("Closing video with ID:", video.id);
+
+  // 停止视频流
+  const videoStream = video.stream;
+  if (videoStream) {
+    videoStream.getTracks().forEach(track => {
+      console.log("Stopping track:", track.id);
+      track.stop();  // 停止该流的所有轨道
+    });
+  }
+  
+  // 从数组中移除该视频对象
+  const index = videos.findIndex(v => v.id === video.id);
+  if (index !== -1) {
+    videos.splice(index, 1);
     sendToServer({
       msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
       receiver: data.receiverAccount.id,
@@ -350,39 +351,76 @@ const closeRemoteDesktop = async () => {
 };
 
 
-function closeVideoStreamById(videoId) {
-  const element = document.getElementById(videoId);
-  if (element && element instanceof HTMLVideoElement) {
-    const videoElement = element;
-    if (videoElement.srcObject instanceof MediaStream) {  // 确保srcObject是MediaStream
-      const tracks = videoElement.srcObject.getTracks();
-      tracks.forEach(track => track.stop());
-      videoElement.srcObject = null;
-    } else {
-      console.error('srcObject is not a MediaStream');
-    }
-  } else {
-    console.error('Provided element is not a video element');
+// 鼠标事件处理改动，传递事件对象和视频元素
+const mouseDown = (e, videoElement) => {
+  sendMouseEvent(e, videoElement, MouseStatus.MOUSE_DOWN);
+};
+
+const mouseUp = (e, videoElement) => {
+  sendMouseEvent(e, videoElement, MouseStatus.MOUSE_UP);
+};
+
+const mouseMove = (e, videoElement) => {
+  sendMouseEvent(e, videoElement, MouseStatus.MOUSE_MOVE);
+};
+
+const wheel = (e, videoElement) => {
+  const type = e.deltaY > 0 ? WheelStatus.WHEEL_DOWN : WheelStatus.WHEEL_UP;
+  sendMouseEvent(e, videoElement, type);
+};
+
+
+// 更新后的 sendMouseEvent 函数
+const sendMouseEvent = (e, videoElement, eventType) => {
+  const x = e.clientX;
+  const y = e.clientY;
+  if (!videoElement) return;
+
+  const widthRatio = remoteDesktopDpi.width / videoElement.clientWidth;
+  const heightRatio = remoteDesktopDpi.height / videoElement.clientHeight;
+
+  const data = {
+    x: Math.round(x * widthRatio),
+    y: Math.round(y * heightRatio),
+    eventType: eventType,
+  };
+
+  sendToClient({
+    type: InputEventType.MOUSE_EVENT,
+    data: data,
+  });
+};
+
+
+// 获取鼠标事件类型
+const mouseType = (mouseStatus: MouseStatus, button: number) => {
+  let type = "";
+  switch (button) {
+    case 0:
+      type = "left-" + mouseStatus;
+      break;
+    case 2:
+      type = "right-" + mouseStatus;
+      break;
+    // TODO 更多的按钮
   }
-}
+
+  return type;
+};
 
 // 关闭远程桌面
 const close = () => {
-  // 检查 desktop.value 是否存在
-  if (desktop.value) {
-    if (desktop.value.srcObject) {
-      const tracks = desktop.value.srcObject as MediaStream;
-      tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-      desktop.value.srcObject = null;
-    }
+  if (desktop.value!.srcObject) {
+    const tracks = desktop.value!.srcObject as MediaStream;
+    tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+    desktop.value!.srcObject = null;
   } else {
-    if (webcamStream) {
-      webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-    }
+    webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
   }
   // 关闭 Peer 连接
   pc.close();
 };
+const videoElements = ref([]);
 
 // 发送消息给服务器
 const sendToServer = (msg: Record<string, any>) => {
@@ -395,132 +433,195 @@ const sendToClient = (msg: Record<string, any>) => {
   let msgJSON = JSON.stringify(msg);
   dc.readyState == "open" && dc.send(msgJSON);
 };
+const videos = reactive([]);
+let activeVideoIndex = ref(null);
+const setActiveVideo = (index) => {
+  activeVideoIndex.value = index;
+};
 
+const addVideo = (stream) => {
+  const videoObj = {
+    id: Date.now().toString(), // 使用时间戳生成唯一ID
+    stream,
+    name: `Video ${videos.length + 1}`
+  };
+  videos.push(videoObj);
+};
+const toggleFullScreen = (videoElement, video, index) => {
+  if (!document.fullscreenElement) {
+    videoElement.requestFullscreen().then(() => {
+      videos[index].isFullscreen = true;  // 设置全屏标志
+      handleFullscreenChange(); // 触发全屏状态变化处理函数
+    }).catch(err => {
+      console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+    });
+  } else {
+    document.exitFullscreen().then(() => {
+      videos.forEach(v => v.isFullscreen = false);  // 清除所有全屏标志
+      handleFullscreenChange(); // 触发全屏状态变化处理函数
+    }).catch(err => {
+      console.error(`Error attempting to disable full-screen mode: ${err.message} (${err.name})`);
+    });
+  }
+};
+
+
+// const handleClick(event, video) => {
+//       if (video.paused) {
+//         video.play(); // 如果视频暂停，则播放视频
+//       }
+//     },
+// 添加变量用于跟踪视频是否在全屏模式下
+const isVideoFullscreen = ref(false);
+
+// 监听视频全屏状态变化
+document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+// 处理视频全屏状态变化
+function handleFullscreenChange() {
+  isVideoFullscreen.value = document.fullscreenElement !== null;
+
+  // 更新按钮位置和样式
+  const buttons = document.querySelectorAll('.close-btn');
+  buttons.forEach(button => {
+    if (isVideoFullscreen.value) {
+      button.style.bottom = '20px';
+      button.style.right = '20px';
+    } else {
+      button.style.bottom = '5%';
+      button.style.right = '5%';
+    }
+  });
+}
+
+document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+// 调整按钮位置以适应全屏模式
+function adjustButtonPositionForFullscreen() {
+  const buttons = document.querySelectorAll('.close-btn');
+  buttons.forEach(button => {
+    button.style.bottom = '5%';
+    button.style.right = '5%';
+    button.style.transform = 'translate(50%, 50%)';
+  });
+}
+
+// 从全屏模式恢复按钮位置
+function restoreButtonPositionFromFullscreen() {
+  const buttons = document.querySelectorAll('.close-btn');
+  buttons.forEach(button => {
+    button.style.bottom = '';
+    button.style.right = '';
+    button.style.transform = '';
+  });
+}
+onMounted(() => {
+  remoteDesktop(); // 在组件挂载时调用 remoteDesktop 方法
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
+});
 </script>
-
 <template>
-
-  <div v-if="data.isConnecting" class="connecting-message sidebarr"
-    style="position: fixed; top: 0; left: 0; right: 0; bottom: 0;">正在被远控...</div>
-  <button v-if="data.isConnecting" class="close-btn" @click="closeRemoteDesktop()">
-    结束被控
-  </button>
-  <div v-if="!data.isConnecting" class="sidebar">
-    <div>
-      <p>
-        address: <span>{{ data.account.id }}</span>
-      </p>
-      <p>
-        password: <span>{{ data.account.password }}</span>
-      </p>
+  <div class="container">
+    <div class="video-grid">
+      <div v-for="(video, index) in videos" :key="video.id" class="video-container"
+        :class="{ 'fullscreen': video.isFullscreen }" @click="setActiveVideo(index)">
+        <div class="video-wrapper">
+          <video v-show="data.isShowRemoteDesktop " class="video" ref="videoElements" :srcObject="video.stream" autoplay controls
+            @mousedown="e => mouseDown(e, $refs.videoElements[index])"
+            @mouseup="e => mouseUp(e, $refs.videoElements[index])"
+            @mousemove="e => mouseMove(e, $refs.videoElements[index])"
+            @wheel="e => wheel(e, $refs.videoElements[index])"
+            @contextmenu.prevent="e => rightClick(e, $refs.videoElements[index])"
+            @dblclick="e => toggleFullScreen($refs.videoElements[index], video, index)" 
+            x5-video-player-type="h5-page"></video>
+          <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeVideo(video)">
+            关闭
+          </button>
+        </div>
+      </div>
     </div>
   </div>
-
-
-  <div v-if="!data.isConnecting" class="form">
-    <input v-model="data.receiverAccount.id" type="text" placeholder="请输入对方id" />
-    <input v-model="data.receiverAccount.password" type="text" placeholder="请输入对方密码" />
-    <button @click="remoteDesktop()">发起远程</button>
-
-  </div>
-
 </template>
 
+
 <style lang="less" scoped>
-.sidebar {
-  width: 100%;
-  height: 160px;
-  background: #1b1b1c;
-  color: #fafafa;
+.container {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  border-bottom: 1px solid #252525;
-  box-sizing: border-box;
-
-  >div {
-    background: #242425;
-    padding: 10px 20px;
-    border-radius: 10px;
-
-    p {
-      line-height: 28px;
-      font-size: 16px;
-
-      span {
-        font-size: 18px;
-        font-weight: 600;
-      }
-    }
-  }
 }
 
-.connecting-message {
-  position: fixed;
-  top: 0;
-  left: 0;
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-gap: 10px;
+}
+
+.video-container {
+  position: relative;
   width: 100%;
-  height: 100%;
-  background: #1b1b1c;
-  color: #fff;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 24px;
 }
 
-.form {
-  height: calc(100% - 160px);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  background: #1b1b1c;
-
-  button {
-    width: 280px;
-    height: 34px;
-    background: #00c1cd;
-  }
-}
-
-input {
-  width: 280px;
-  outline: none;
-  border: 1px solid #252525;
-  padding: 0 10px;
-  height: 34px;
-  box-sizing: border-box;
-  border-radius: 5px;
-  margin-bottom: 30px;
-}
-
-button {
-  outline: none;
-  border: none;
-  color: #fff;
-  border-radius: 5px;
-}
-
-.desktop {
+.video-wrapper {
+  position: relative;
   width: 100%;
-  height: 100%;
-  position: fixed;
-  top: 0;
-  left: 0;
-  background: #121212;
-  cursor: none;
+}
+
+video {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 .close-btn {
-  width: 60px;
-  height: 24px;
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 1;
+  position: absolute;
+  z-index: 999;
   background: #d71526;
   font-size: 12px;
+  bottom: 5%;
+  right: 5%;
 }
+
+.close-btn.fullscreen {
+  bottom: 20px;
+  right: 20px;
+  transform: translate(50%, 50%);
+}
+
+/* 隐藏video 播放按钮 */
+/* 
+.video::-webkit-media-controls-play-button {
+  pointer-events: none; 
+}
+.video::-webkit-media-controls-start-playback-button {
+  pointer-events: none; 
+}
+.video::-webkit-media-controls-enclosure { 
+  pointer-events: none; 
+}
+
+.video::-webkit-media-controls-timeline {
+  display: none;
+}
+
+.video::-webkit-media-controls-current-time-display {
+  display: none;            
+}
+
+.video::-webkit-media-controls-time-remaining-display {
+  display: none;            
+}
+
+.video::-webkit-media-controls-mute-button {
+  display: none;            
+}
+.video::-webkit-media-controls-toggle-closed-captions-button {
+  display: none;            
+}
+
+.video::-webkit-media-controls-volume-slider {
+  display: none;            
+}
+
+*/
 </style>

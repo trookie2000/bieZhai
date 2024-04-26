@@ -134,8 +134,11 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
 
     data.receiverAccount.id = msg.sender;
 
+    // 初始化单独的 RTCPeerConnection
+    const peerConnection = await initRTCPeerConnection();
 
-    await initRTCPeerConnection();
+    // 添加 Peer 连接到视频对象中
+    addVideoPeerConnection(peerConnection);
 
     initRTCDataChannel();
 
@@ -146,16 +149,17 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
     });
 
     webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
-      pc.addTrack(track, webcamStream)
+      peerConnection.addTrack(track, webcamStream)
     );
 
-    sendOffer();
+    sendOffer(peerConnection);
   } catch (error) {
     console.error("处理远程桌面请求时出错:", error);
     // 在发生错误时需要重置连接状态
     data.isConnecting = false;
   }
 };
+
 // 初始化 RTCPeerConnections
 const initRTCPeerConnection = () => {
   const iceServer: object = {
@@ -179,6 +183,13 @@ const initRTCPeerConnection = () => {
   pc.onsignalingstatechange = handleSignalingStateChangeEvent;
   pc.ontrack = handleTrackEvent;
   pc.ondatachannel = handleDataChannel;
+};
+const addVideoPeerConnection = (peerConnection) => {
+  // 找到最后一个视频对象并添加 Peer 连接
+  const lastIndex = videos.length - 1;
+  if (lastIndex >= 0) {
+    videos[lastIndex].peerConnection = peerConnection;
+  }
 };
 
 // 处理 ICE 候选项事件
@@ -284,15 +295,15 @@ const initRTCDataChannel = () => {
 };
 
 // 发送共享桌面邀请
-const sendOffer = async () => {
-  const offer = await pc.createOffer();
+const sendOffer = async (peerConnection) => { // 接收 Peer 连接作为参数
+  const offer = await peerConnection.createOffer();
 
-  await pc.setLocalDescription(offer);
+  await peerConnection.setLocalDescription(offer);
 
   sendToServer({
     msg_type: MessageType.VIDEO_OFFER,
     receiver: data.receiverAccount.id,
-    msg: JSON.stringify(pc.localDescription),
+    msg: JSON.stringify(peerConnection.localDescription),
     sender: data.account.id,
   });
 };
@@ -325,20 +336,39 @@ const remoteDesktop = async () => {
 //     });
 //   }
 // };
+// const closeVideo = (video) => {
+//   console.log("Closing video with ID:", video.id);
+//   close();
+//   // 停止视频流
+//   const videoStream = video.stream;
+//   if (videoStream) {
+//     videoStream.getTracks().forEach(track => {
+//       console.log("Stopping track:", track.id);
+//       track.stop();  // 停止该流的所有轨道
+//     });
+  
+//   }
+  
+//   // 从数组中移除该视频对象
+//   const index = videos.findIndex(v => v.id === video.id);
+//   if (index !== -1) {
+//     videos.splice(index, 1);
+//     sendToServer({
+//       msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
+//       receiver: data.receiverAccount.id,
+//       msg: data.receiverAccount.password,
+//       sender: data.account.id,
+//     });
+//   }
+// };
 const closeVideo = (video) => {
   console.log("Closing video with ID:", video.id);
-
-  // 停止视频流
-  const videoStream = video.stream;
-  if (videoStream) {
-    videoStream.getTracks().forEach(track => {
-      console.log("Stopping track:", video.id);
-      track.stop();  // 停止该流的所有轨道
-    });
+  const peerConnection = video.peerConnection;
+  if (peerConnection) {
+    close(peerConnection);
   }
-  
   // 从数组中移除该视频对象
-  const index = videos.findIndex(v => v.id === video.id);
+  const index = videos.findIndex((v) => v.id === video.id);
   if (index !== -1) {
     videos.splice(index, 1);
     sendToServer({
@@ -409,16 +439,13 @@ const mouseType = (mouseStatus: MouseStatus, button: number) => {
 };
 
 // 关闭远程桌面
-const close = () => {
-  if (desktop.value!.srcObject) {
-    const tracks = desktop.value!.srcObject as MediaStream;
-    tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-    desktop.value!.srcObject = null;
-  } else {
-    webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+const close = (peerConnection) => {
+  if (peerConnection) {
+    peerConnection.getSenders().forEach(sender => {
+      peerConnection.removeTrack(sender);
+    });
+    peerConnection.close();
   }
-  // 关闭 Peer 连接
-  pc.close();
 };
 const videoElements = ref([]);
 
@@ -443,10 +470,12 @@ const addVideo = (stream) => {
   const videoObj = {
     id: Date.now().toString(), // 使用时间戳生成唯一ID
     stream,
-    name: `Video ${videos.length + 1}`
+    name: `Video ${videos.length + 1}`,
+    peerConnection: null // 新增属性存储 Peer 连接
   };
   videos.push(videoObj);
 };
+
 const toggleFullScreen = (videoElement, video, index) => {
   if (!document.fullscreenElement) {
     videoElement.requestFullscreen().then(() => {
