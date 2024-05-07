@@ -1,8 +1,15 @@
-
 <script setup lang="ts">
-import { ref, reactive, onBeforeMount, onMounted, nextTick, watch, onBeforeUnmount } from "vue";
+import {
+  ref,
+  reactive,
+  onBeforeMount,
+  onMounted,
+  nextTick,
+  watch,
+  onBeforeUnmount,
+} from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
-import { confirm } from '@tauri-apps/api/dialog';
+import { confirm } from "@tauri-apps/api/dialog";
 import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
 
 import {
@@ -82,6 +89,9 @@ const initWebSocket = () => {
       case MessageType.CLOSE_REMOTE_DESKTOP:
         close();
         break;
+      case MessageType.STOP_SHARING:
+        closeVideoByMacAddress(msg);
+        break;
     }
   };
 
@@ -89,6 +99,15 @@ const initWebSocket = () => {
     console.log("WebSocket 连接错误:", e);
   };
 };
+
+function closeVideoByMacAddress(msg: Record<string, any>) {
+  const id = JSON.parse(msg.msg).id
+  const video = videos.find(item => {
+    return item.stream.id == id
+  })
+
+  closeVideo(video)
+}
 
 // 处理视频邀请消息
 const handleVideoOfferMsg = async (msg: Record<string, any>) => {
@@ -134,11 +153,7 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
 
     data.receiverAccount.id = msg.sender;
 
-    // 初始化单独的 RTCPeerConnection
-    const peerConnection = await initRTCPeerConnection();
-
-    // 添加 Peer 连接到视频对象中
-    addVideoPeerConnection(peerConnection);
+    await initRTCPeerConnection();
 
     initRTCDataChannel();
 
@@ -148,18 +163,17 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
       audio: false,
     });
 
-    webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
-      peerConnection.addTrack(track, webcamStream)
-    );
+    webcamStream
+      .getTracks()
+      .forEach((track: MediaStreamTrack) => pc.addTrack(track, webcamStream));
 
-    sendOffer(peerConnection);
+    sendOffer();
   } catch (error) {
     console.error("处理远程桌面请求时出错:", error);
     // 在发生错误时需要重置连接状态
     data.isConnecting = false;
   }
 };
-
 // 初始化 RTCPeerConnections
 const initRTCPeerConnection = () => {
   const iceServer: object = {
@@ -183,13 +197,6 @@ const initRTCPeerConnection = () => {
   pc.onsignalingstatechange = handleSignalingStateChangeEvent;
   pc.ontrack = handleTrackEvent;
   pc.ondatachannel = handleDataChannel;
-};
-const addVideoPeerConnection = (peerConnection) => {
-  // 找到最后一个视频对象并添加 Peer 连接
-  const lastIndex = videos.length - 1;
-  if (lastIndex >= 0) {
-    videos[lastIndex].peerConnection = peerConnection;
-  }
 };
 
 // 处理 ICE 候选项事件
@@ -232,11 +239,10 @@ const handleTrackEvent = (event) => {
     if (elem) {
       elem.srcObject = stream;
     } else {
-      console.error('Video element not found');
+      console.error("Video element not found");
     }
   });
 };
-
 
 // 数据通道事件处理
 const handleDataChannel = (e: RTCDataChannelEvent) => {
@@ -295,15 +301,15 @@ const initRTCDataChannel = () => {
 };
 
 // 发送共享桌面邀请
-const sendOffer = async (peerConnection) => { // 接收 Peer 连接作为参数
-  const offer = await peerConnection.createOffer();
+const sendOffer = async () => {
+  const offer = await pc.createOffer();
 
-  await peerConnection.setLocalDescription(offer);
+  await pc.setLocalDescription(offer);
 
   sendToServer({
     msg_type: MessageType.VIDEO_OFFER,
     receiver: data.receiverAccount.id,
-    msg: JSON.stringify(peerConnection.localDescription),
+    msg: JSON.stringify(pc.localDescription),
     sender: data.account.id,
   });
 };
@@ -336,37 +342,18 @@ const remoteDesktop = async () => {
 //     });
 //   }
 // };
-// const closeVideo = (video) => {
-//   console.log("Closing video with ID:", video.id);
-//   close();
-//   // 停止视频流
-//   const videoStream = video.stream;
-//   if (videoStream) {
-//     videoStream.getTracks().forEach(track => {
-//       console.log("Stopping track:", track.id);
-//       track.stop();  // 停止该流的所有轨道
-//     });
-  
-//   }
-  
-//   // 从数组中移除该视频对象
-//   const index = videos.findIndex(v => v.id === video.id);
-//   if (index !== -1) {
-//     videos.splice(index, 1);
-//     sendToServer({
-//       msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
-//       receiver: data.receiverAccount.id,
-//       msg: data.receiverAccount.password,
-//       sender: data.account.id,
-//     });
-//   }
-// };
 const closeVideo = (video) => {
   console.log("Closing video with ID:", video.id);
-  const peerConnection = video.peerConnection;
-  if (peerConnection) {
-    close(peerConnection);
+
+  // 停止视频流
+  const videoStream = video.stream;
+  if (videoStream) {
+    videoStream.getTracks().forEach((track) => {
+      console.log("Stopping track:", video.id);
+      track.stop(); // 停止该流的所有轨道
+    });
   }
+
   // 从数组中移除该视频对象
   const index = videos.findIndex((v) => v.id === video.id);
   if (index !== -1) {
@@ -379,7 +366,6 @@ const closeVideo = (video) => {
     });
   }
 };
-
 
 // 鼠标事件处理改动，传递事件对象和视频元素
 const mouseDown = (e, videoElement) => {
@@ -398,7 +384,6 @@ const wheel = (e, videoElement) => {
   const type = e.deltaY > 0 ? WheelStatus.WHEEL_DOWN : WheelStatus.WHEEL_UP;
   sendMouseEvent(e, videoElement, type);
 };
-
 
 // 更新后的 sendMouseEvent 函数
 const sendMouseEvent = (e, videoElement, eventType) => {
@@ -421,7 +406,6 @@ const sendMouseEvent = (e, videoElement, eventType) => {
   });
 };
 
-
 // 获取鼠标事件类型
 const mouseType = (mouseStatus: MouseStatus, button: number) => {
   let type = "";
@@ -439,13 +423,16 @@ const mouseType = (mouseStatus: MouseStatus, button: number) => {
 };
 
 // 关闭远程桌面
-const close = (peerConnection) => {
-  if (peerConnection) {
-    peerConnection.getSenders().forEach(sender => {
-      peerConnection.removeTrack(sender);
-    });
-    peerConnection.close();
+const close = () => {
+  if (desktop.value!.srcObject) {
+    const tracks = desktop.value!.srcObject as MediaStream;
+    tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+    desktop.value!.srcObject = null;
+  } else {
+    webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
   }
+  // 关闭 Peer 连接
+  pc.close();
 };
 const videoElements = ref([]);
 
@@ -461,6 +448,22 @@ const sendToClient = (msg: Record<string, any>) => {
   dc.readyState == "open" && dc.send(msgJSON);
 };
 const videos = reactive([]);
+watch(
+  videos,
+  (value) => {
+    nextTick(() => {
+      const videos = document.querySelectorAll("video");
+      videos.forEach((video) => {
+        video.addEventListener("click", (event) => {
+          event.preventDefault();
+        });
+      });
+    });
+  },
+  {
+    deep: true,
+  }
+);
 let activeVideoIndex = ref(null);
 const setActiveVideo = (index) => {
   activeVideoIndex.value = index;
@@ -471,29 +474,36 @@ const addVideo = (stream) => {
     id: Date.now().toString(), // 使用时间戳生成唯一ID
     stream,
     name: `Video ${videos.length + 1}`,
-    peerConnection: null // 新增属性存储 Peer 连接
   };
   videos.push(videoObj);
 };
-
 const toggleFullScreen = (videoElement, video, index) => {
   if (!document.fullscreenElement) {
-    videoElement.requestFullscreen().then(() => {
-      videos[index].isFullscreen = true;  // 设置全屏标志
-      handleFullscreenChange(); // 触发全屏状态变化处理函数
-    }).catch(err => {
-      console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
-    });
+    videoElement
+      .requestFullscreen()
+      .then(() => {
+        videos[index].isFullscreen = true; // 设置全屏标志
+        handleFullscreenChange(); // 触发全屏状态变化处理函数
+      })
+      .catch((err) => {
+        console.error(
+          `Error attempting to enable full-screen mode: ${err.message} (${err.name})`
+        );
+      });
   } else {
-    document.exitFullscreen().then(() => {
-      videos.forEach(v => v.isFullscreen = false);  // 清除所有全屏标志
-      handleFullscreenChange(); // 触发全屏状态变化处理函数
-    }).catch(err => {
-      console.error(`Error attempting to disable full-screen mode: ${err.message} (${err.name})`);
-    });
+    document
+      .exitFullscreen()
+      .then(() => {
+        videos.forEach((v) => (v.isFullscreen = false)); // 清除所有全屏标志
+        handleFullscreenChange(); // 触发全屏状态变化处理函数
+      })
+      .catch((err) => {
+        console.error(
+          `Error attempting to disable full-screen mode: ${err.message} (${err.name})`
+        );
+      });
   }
 };
-
 
 // const handleClick(event, video) => {
 //       if (video.paused) {
@@ -504,68 +514,88 @@ const toggleFullScreen = (videoElement, video, index) => {
 const isVideoFullscreen = ref(false);
 
 // 监听视频全屏状态变化
-document.addEventListener('fullscreenchange', handleFullscreenChange);
+document.addEventListener("fullscreenchange", handleFullscreenChange);
 
 // 处理视频全屏状态变化
 function handleFullscreenChange() {
   isVideoFullscreen.value = document.fullscreenElement !== null;
 
   // 更新按钮位置和样式
-  const buttons = document.querySelectorAll('.close-btn');
-  buttons.forEach(button => {
+  const buttons = document.querySelectorAll(".close-btn");
+  buttons.forEach((button) => {
     if (isVideoFullscreen.value) {
-      button.style.bottom = '20px';
-      button.style.right = '20px';
+      button.style.bottom = "20px";
+      button.style.right = "20px";
     } else {
-      button.style.bottom = '5%';
-      button.style.right = '5%';
+      button.style.bottom = "5%";
+      button.style.right = "5%";
     }
   });
 }
 
-document.addEventListener('fullscreenchange', handleFullscreenChange);
+document.addEventListener("fullscreenchange", handleFullscreenChange);
 
 // 调整按钮位置以适应全屏模式
 function adjustButtonPositionForFullscreen() {
-  const buttons = document.querySelectorAll('.close-btn');
-  buttons.forEach(button => {
-    button.style.bottom = '5%';
-    button.style.right = '5%';
-    button.style.transform = 'translate(50%, 50%)';
+  const buttons = document.querySelectorAll(".close-btn");
+  buttons.forEach((button) => {
+    button.style.bottom = "5%";
+    button.style.right = "5%";
+    button.style.transform = "translate(50%, 50%)";
   });
 }
 
 // 从全屏模式恢复按钮位置
 function restoreButtonPositionFromFullscreen() {
-  const buttons = document.querySelectorAll('.close-btn');
-  buttons.forEach(button => {
-    button.style.bottom = '';
-    button.style.right = '';
-    button.style.transform = '';
+  const buttons = document.querySelectorAll(".close-btn");
+  buttons.forEach((button) => {
+    button.style.bottom = "";
+    button.style.right = "";
+    button.style.transform = "";
   });
 }
 onMounted(() => {
   remoteDesktop(); // 在组件挂载时调用 remoteDesktop 方法
 });
 onBeforeUnmount(() => {
-  document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  document.removeEventListener("fullscreenchange", handleFullscreenChange);
 });
 </script>
 <template>
   <div class="container">
     <div class="video-grid">
-      <div v-for="(video, index) in videos" :key="video.id" class="video-container"
-        :class="{ 'fullscreen': video.isFullscreen }" @click="setActiveVideo(index)">
+      <div
+        v-for="(video, index) in videos"
+        :key="video.id"
+        class="video-container"
+        :class="{ fullscreen: video.isFullscreen }"
+        @click="setActiveVideo(index)"
+      >
         <div class="video-wrapper">
-          <video v-show="data.isShowRemoteDesktop " class="video" ref="videoElements" :srcObject="video.stream" autoplay controls
-            @mousedown="e => mouseDown(e, $refs.videoElements[index])"
-            @mouseup="e => mouseUp(e, $refs.videoElements[index])"
-            @mousemove="e => mouseMove(e, $refs.videoElements[index])"
-            @wheel="e => wheel(e, $refs.videoElements[index])"
-            @contextmenu.prevent="e => rightClick(e, $refs.videoElements[index])"
-            @dblclick="e => toggleFullScreen($refs.videoElements[index], video, index)" 
-            x5-video-player-type="h5-page"></video>
-          <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeVideo(video)">
+          <video
+            v-show="data.isShowRemoteDesktop"
+            class="video"
+            ref="videoElements"
+            :srcObject="video.stream"
+            autoplay
+            controls
+            @mousedown="(e) => mouseDown(e, $refs.videoElements[index])"
+            @mouseup="(e) => mouseUp(e, $refs.videoElements[index])"
+            @mousemove="(e) => mouseMove(e, $refs.videoElements[index])"
+            @wheel="(e) => wheel(e, $refs.videoElements[index])"
+            @contextmenu.prevent="
+              (e) => rightClick(e, $refs.videoElements[index])
+            "
+            @dblclick="
+              (e) => toggleFullScreen($refs.videoElements[index], video, index)
+            "
+            x5-video-player-type="h5-page"
+          ></video>
+          <button
+            v-if="data.isShowRemoteDesktop"
+            class="close-btn"
+            @click="closeVideo(video)"
+          >
             关闭
           </button>
         </div>
@@ -573,7 +603,6 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-
 
 <style lang="less" scoped>
 .container {

@@ -25,6 +25,7 @@ enum MessageType {
     NEW_ICE_CANDIDATE = "new-ice-candidate",     // 新的 ICE 候选项
     REMOTE_DESKTOP = "remote-desktop",           // 远程桌面请求
     CLOSE_REMOTE_DESKTOP = "close-remote-desktop", // 关闭远程桌面
+    STOP_SHARING = "stop-sharing"
 }
 
 // 输入事件类型枚举，用于标识不同类型的输入事件

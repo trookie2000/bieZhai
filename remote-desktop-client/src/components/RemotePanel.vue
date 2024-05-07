@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onBeforeMount } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
-import { confirm } from '@tauri-apps/api/dialog';
+import { confirm } from "@tauri-apps/api/dialog";
 import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
 // import TauriWebsocket from 'tauri-plugin-websocket-api';
 // import WebSocket from "tauri-plugin-websocket-api";
@@ -141,10 +141,23 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
     audio: false,
   });
 
+  // 点击漂浮栏中的【停止共享】按钮，MediaStream 触发 oninactive 事件，同时 MediaStreamTrack 触发 onended 事件
+  webcamStream.oninactive = () => {
+    console.log("mediaStream oninactive");
 
-  webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
-    pc.addTrack(track, webcamStream)
-  );
+    sendToServer({
+      msg_type: MessageType.STOP_SHARING,
+      receiver: data.receiverAccount.id,
+      msg: JSON.stringify({
+        id: webcamStream.id
+      }),
+      sender: data.account.id,
+    });
+  };
+
+  webcamStream
+    .getTracks()
+    .forEach((track: MediaStreamTrack) => pc.addTrack(track, webcamStream));
 
   sendOffer();
 };
@@ -310,16 +323,16 @@ const remoteDesktop = async () => {
   const uniqueLabel = `webview_${Date.now()}`;
 
   const webview = new WebviewWindow("1", {
-    url: '#/screenOne',
+    url: "#/screenOne",
   });
 
-  webview.once('tauri://created', function () {
+  webview.once("tauri://created", function () {
     // Webview created successfully
   });
 
-  webview.once('tauri://error', function (e) {
+  webview.once("tauri://error", function (e) {
     // An error occurred during webview window creation
-    console.error('Webview error:', e);
+    console.error("Webview error:", e);
   });
 
   sendToServer({
@@ -332,19 +345,19 @@ const remoteDesktop = async () => {
 
 // 关闭远程桌面
 const closeRemoteDesktop = async () => {
-  const confirmed = await confirm('确认结束被控？', '提示');
-  if(confirmed){
+  const confirmed = await confirm("确认结束被控？", "提示");
+  if (confirmed) {
     appWindow.setFullscreen(false);
-  data.isShowRemoteDesktop = false;
-  appWindow.close()
-  close();
-  sendToServer({
-    msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
-    receiver: data.receiverAccount.id,
-    msg: data.receiverAccount.password,
-    sender: data.account.id,
-  });
-}
+    data.isShowRemoteDesktop = false;
+    appWindow.close();
+    close();
+    sendToServer({
+      msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
+      receiver: data.receiverAccount.id,
+      msg: data.receiverAccount.password,
+      sender: data.account.id,
+    });
+  }
 };
 
 // 关闭远程桌面
@@ -358,7 +371,9 @@ const close = () => {
     }
   } else {
     if (webcamStream) {
-      webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+      webcamStream
+        .getTracks()
+        .forEach((track: MediaStreamTrack) => track.stop());
     }
   }
   // 关闭 Peer 连接
@@ -376,15 +391,23 @@ const sendToClient = (msg: Record<string, any>) => {
   let msgJSON = JSON.stringify(msg);
   dc.readyState == "open" && dc.send(msgJSON);
 };
-
 </script>
 
 <template>
- 
- <div v-if="data.isConnecting" class="connecting-message sidebarr" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0;">正在被远控...</div>
- <button v-if="data.isConnecting" class="close-btn" @click="closeRemoteDesktop()">
-  结束被控
-</button>
+  <div
+    v-if="data.isConnecting"
+    class="connecting-message sidebarr"
+    style="position: fixed; top: 0; left: 0; right: 0; bottom: 0"
+  >
+    正在被远控...
+  </div>
+  <button
+    v-if="data.isConnecting"
+    class="close-btn"
+    @click="closeRemoteDesktop()"
+  >
+    结束被控
+  </button>
   <div v-if="!data.isConnecting" class="sidebar">
     <div>
       <p>
@@ -394,16 +417,21 @@ const sendToClient = (msg: Record<string, any>) => {
         password: <span>{{ data.account.password }}</span>
       </p>
     </div>
-    </div>
- 
-  
-  <div v-if="!data.isConnecting" class="form">
-    <input v-model="data.receiverAccount.id" type="text" placeholder="请输入对方id" />
-    <input v-model="data.receiverAccount.password" type="text" placeholder="请输入对方密码" />
-    <button @click="remoteDesktop()">发起远程</button>
-    
   </div>
-  
+
+  <div v-if="!data.isConnecting" class="form">
+    <input
+      v-model="data.receiverAccount.id"
+      type="text"
+      placeholder="请输入对方id"
+    />
+    <input
+      v-model="data.receiverAccount.password"
+      type="text"
+      placeholder="请输入对方密码"
+    />
+    <button @click="remoteDesktop()">发起远程</button>
+  </div>
 </template>
 
 <style lang="less" scoped>
@@ -419,7 +447,7 @@ const sendToClient = (msg: Record<string, any>) => {
   border-bottom: 1px solid #252525;
   box-sizing: border-box;
 
-  >div {
+  > div {
     background: #242425;
     padding: 10px 20px;
     border-radius: 10px;
@@ -436,17 +464,17 @@ const sendToClient = (msg: Record<string, any>) => {
   }
 }
 .connecting-message {
-  position: fixed; 
-  top: 0; 
-  left: 0; 
-  width: 100%; 
-  height: 100%; 
-  background: #1b1b1c; 
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #1b1b1c;
   color: #fff;
   display: flex;
-  justify-content: center; 
-  align-items: center; 
-  font-size: 24px; 
+  justify-content: center;
+  align-items: center;
+  font-size: 24px;
 }
 .form {
   height: calc(100% - 160px);
