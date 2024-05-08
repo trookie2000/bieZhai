@@ -101,12 +101,14 @@ const initWebSocket = () => {
 };
 
 function closeVideoByMacAddress(msg: Record<string, any>) {
-  const id = JSON.parse(msg.msg).id
-  const video = videos.find(item => {
-    return item.stream.id == id
-  })
+  const id = JSON.parse(msg.msg).id;
+  const video = videos.find((item) => {
+    return item.stream.id == id;
+  });
 
-  closeVideo(video)
+  console.log(videos);
+
+  closeVideo(video);
 }
 
 // 处理视频邀请消息
@@ -229,6 +231,8 @@ const handleSignalingStateChangeEvent = (event: Event) => {
 // 获取数据流事件处理
 // 处理新视频流事件
 const handleTrackEvent = (event) => {
+  console.log(event.streams);
+
   const stream = event.streams[0];
   addVideo(stream, `Video ${videos.length + 1}`);
 
@@ -241,6 +245,26 @@ const handleTrackEvent = (event) => {
     } else {
       console.error("Video element not found");
     }
+
+    document.onkeydown = (e: KeyboardEvent) => {
+      sendToClient({
+        type: InputEventType.KEY_EVENT,
+        data: {
+          eventType: KeyboardStatus.MOUSE_DOWN,
+          key: e.key,
+        },
+      });
+    };
+
+    document.onkeyup = (e: KeyboardEvent) => {
+      sendToClient({
+        type: InputEventType.KEY_EVENT,
+        data: {
+          eventType: KeyboardStatus.MOUSE_UP,
+          key: e.key,
+        },
+      });
+    };
   });
 };
 
@@ -346,34 +370,38 @@ const closeVideo = (video) => {
   console.log("Closing video with ID:", video.id);
 
   // 停止视频流
-  const videoStream = video.stream;
-  if (videoStream) {
-    videoStream.getTracks().forEach((track) => {
-      console.log("Stopping track:", video.id);
-      track.stop(); // 停止该流的所有轨道
-    });
-  }
+  // const videoStream = video.stream;
+  // if (videoStream) {
+  //   videoStream.getTracks().forEach((track) => {
+  //     console.log("Stopping track:", video.id);
+  //     track.stop(); // 停止该流的所有轨道
+  //   });
+  // }
 
   // 从数组中移除该视频对象
   const index = videos.findIndex((v) => v.id === video.id);
   if (index !== -1) {
-    videos.splice(index, 1);
     sendToServer({
       msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
       receiver: data.receiverAccount.id,
-      msg: data.receiverAccount.password,
+      msg: JSON.stringify({
+        password: data.receiverAccount.password,
+        id: video.stream.id,
+      }),
       sender: data.account.id,
     });
+
+    videos.splice(index, 1);
   }
 };
 
 // 鼠标事件处理改动，传递事件对象和视频元素
 const mouseDown = (e, videoElement) => {
-  sendMouseEvent(e, videoElement, MouseStatus.MOUSE_DOWN);
+  sendMouseEvent(e, videoElement, mouseType(MouseStatus.MOUSE_DOWN, e.button));
 };
 
 const mouseUp = (e, videoElement) => {
-  sendMouseEvent(e, videoElement, MouseStatus.MOUSE_UP);
+  sendMouseEvent(e, videoElement, mouseType(MouseStatus.MOUSE_UP, e.button));
 };
 
 const mouseMove = (e, videoElement) => {
@@ -383,6 +411,10 @@ const mouseMove = (e, videoElement) => {
 const wheel = (e, videoElement) => {
   const type = e.deltaY > 0 ? WheelStatus.WHEEL_DOWN : WheelStatus.WHEEL_UP;
   sendMouseEvent(e, videoElement, type);
+};
+
+const rightClick = (e, videoElement) => {
+  sendMouseEvent(e, videoElement, MouseStatus.RIGHT_CLICK);
 };
 
 // 更新后的 sendMouseEvent 函数
@@ -424,15 +456,17 @@ const mouseType = (mouseStatus: MouseStatus, button: number) => {
 
 // 关闭远程桌面
 const close = () => {
-  if (desktop.value!.srcObject) {
-    const tracks = desktop.value!.srcObject as MediaStream;
-    tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-    desktop.value!.srcObject = null;
-  } else {
-    webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-  }
-  // 关闭 Peer 连接
-  pc.close();
+  console.log("close ......");
+
+  // if (desktop.value!.srcObject) {
+  //   const tracks = desktop.value!.srcObject as MediaStream;
+  //   tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+  //   desktop.value!.srcObject = null;
+  // } else {
+  //   webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+  // }
+  // // 关闭 Peer 连接
+  // pc.close();
 };
 const videoElements = ref([]);
 

@@ -20,7 +20,7 @@ const data = reactive({
     password: "",
   },
   receiverAccount: {
-    id: "",
+    id: "00:FF:59:CB:C2:BE",
     password: "",
   },
   isShowRemoteDesktop: false,
@@ -34,7 +34,7 @@ const desktop = ref<HTMLVideoElement>();
 let ws: WebSocket;
 let pc: RTCPeerConnection;
 let dc: RTCDataChannel;
-let webcamStream: MediaStream;
+let webcamStreamArr: MediaStream[] = [];
 //分辨率
 let remoteDesktopDpi: Record<string, any>;
 
@@ -78,7 +78,7 @@ const initWebSocket = () => {
         handleRemoteDesktopRequest(msg);
         break;
       case MessageType.CLOSE_REMOTE_DESKTOP:
-        close();
+        close(msg);
         break;
     }
   };
@@ -136,20 +136,24 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
   initRTCDataChannel();
 
   // 获取本地桌面流s
-  webcamStream = await navigator.mediaDevices.getDisplayMedia({
+  const webcamStream = await navigator.mediaDevices.getDisplayMedia({
     video: true,
     audio: false,
   });
 
+  webcamStreamArr.push(webcamStream);
+
   // 点击漂浮栏中的【停止共享】按钮，MediaStream 触发 oninactive 事件，同时 MediaStreamTrack 触发 onended 事件
-  webcamStream.oninactive = () => {
+  webcamStream.oninactive = (e) => {
     console.log("mediaStream oninactive");
+
+    console.log(webcamStream);
 
     sendToServer({
       msg_type: MessageType.STOP_SHARING,
       receiver: data.receiverAccount.id,
       msg: JSON.stringify({
-        id: webcamStream.id
+        id: e.currentTarget.id,
       }),
       sender: data.account.id,
     });
@@ -361,23 +365,35 @@ const closeRemoteDesktop = async () => {
 };
 
 // 关闭远程桌面
-const close = () => {
+const close = (msg?: Record<string, any>) => {
+  const id = JSON.parse(msg?.msg).id;
+  console.log(id);
+
   // 检查 desktop.value 是否存在
-  if (desktop.value) {
-    if (desktop.value.srcObject) {
-      const tracks = desktop.value.srcObject as MediaStream;
-      tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-      desktop.value.srcObject = null;
-    }
+  // if (desktop.value) {
+  //   if (desktop.value.srcObject) {
+  //     const tracks = desktop.value.srcObject as MediaStream;
+  //     tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+  //     desktop.value.srcObject = null;
+  //   }
+  // } else {
+  //   if (webcamStream) {
+  //     webcamStream
+  //       .getTracks()
+  //       .forEach((track: MediaStreamTrack) => track.stop());
+  //   }
+  // }
+  // // 关闭 Peer 连接
+  // pc.close();
+
+  if (msg) {
+    const stream = webcamStreamArr.find((item) => (item.id == id));
+    stream?.getTracks().forEach((track: MediaStreamTrack) => track.stop());
   } else {
-    if (webcamStream) {
-      webcamStream
-        .getTracks()
-        .forEach((track: MediaStreamTrack) => track.stop());
-    }
+    webcamStreamArr.forEach((stream) => {
+      stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+    });
   }
-  // 关闭 Peer 连接
-  pc.close();
 };
 
 // 发送消息给服务器
