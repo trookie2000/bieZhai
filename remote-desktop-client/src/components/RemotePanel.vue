@@ -136,7 +136,7 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
   initRTCDataChannel();
 
   // 获取本地桌面流s
-  const webcamStream = await navigator.mediaDevices.getDisplayMedia({
+  const webcamStream:any = await navigator.mediaDevices.getDisplayMedia({
     video: true,
     audio: false,
   });
@@ -144,7 +144,7 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
   webcamStreamArr.push(webcamStream);
 
   // 点击漂浮栏中的【停止共享】按钮，MediaStream 触发 oninactive 事件，同时 MediaStreamTrack 触发 onended 事件
-  webcamStream.oninactive = (e) => {
+  webcamStream.oninactive = (e:any) => {
     console.log("mediaStream oninactive");
 
     console.log(webcamStream);
