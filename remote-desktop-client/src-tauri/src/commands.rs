@@ -86,6 +86,9 @@ pub fn key_event(event_type: &str, key: &str) {
 
     let k: Key;
 
+    println!("type {}", event_type);
+    println!("key {}", key);
+
     if key.len() > 1 {
         // 根据键名获取键值，如果不存在则打印错误信息
         match KEYMAP.get(key) {
