@@ -542,7 +542,7 @@ const toggleFullScreen = (videoElement:any, vide:any, index:any) => {
     document
       .exitFullscreen()
       .then(() => {
-        videos.forEach((v) => (v.isFullscreen = false));
+        videos.forEach((v:any) => (v.isFullscreen = false));
         handleFullscreenChange();
         videoElement.controls = true; // 退出全屏后显示控制栏
       })
@@ -619,7 +619,6 @@ onBeforeUnmount(() => {
             "
             x5-video-player-type="h5-page"
             autoplay
-            controls="true"
           ></video>
           
           <button

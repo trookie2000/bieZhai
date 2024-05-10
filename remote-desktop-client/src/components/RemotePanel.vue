@@ -157,6 +157,7 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
       }),
       sender: data.account.id,
     });
+    data.isConnecting = false;
   };
 
   webcamStream
