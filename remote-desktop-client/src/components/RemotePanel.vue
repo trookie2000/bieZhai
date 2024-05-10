@@ -20,7 +20,7 @@ const data = reactive({
     password: "",
   },
   receiverAccount: {
-    id: "00:FF:59:CB:C2:BE",
+    id: "",
     password: "",
   },
   isShowRemoteDesktop: false,

@@ -367,7 +367,7 @@ const remoteDesktop = async () => {
 //   }
 // };
 const closeVideo = (video:any) => {
-  console.log("Closing video with ID:", video.id);
+  console.log("Closing video with ID:", videos);
 
   // 停止视频流
   // const videoStream = video.stream;
@@ -482,6 +482,7 @@ const sendToClient = (msg: Record<string, any>) => {
   dc.readyState == "open" && dc.send(msgJSON);
 };
 const videos:any = reactive([]);
+//
 watch(
   videos,
   (value) => {
@@ -489,7 +490,14 @@ watch(
       const videos = document.querySelectorAll("video");
       videos.forEach((video) => {
         video.addEventListener("click", (event) => {
-          event.preventDefault();
+          event.preventDefault(); 
+        });
+        video.addEventListener("keydown", (event) => {
+          if (event.keyCode === 32 || event.keyCode === 13) {
+            console.log("ss");
+            video.pause();
+            event.preventDefault(); 
+          }
         });
       });
     });
@@ -498,6 +506,9 @@ watch(
     deep: true,
   }
 );
+
+
+
 let activeVideoIndex = ref(null);
 const setActiveVideo = (index:any) => {
   activeVideoIndex.value = index;
@@ -511,13 +522,16 @@ const addVideo = (stream:any) => {
   };
   videos.push(videoObj);
 };
-const toggleFullScreen = (videoElement:any, video:any, index:any) => {
+const toggleFullScreen = (videoElement:any, vide:any, index:any) => {
   if (!document.fullscreenElement) {
     videoElement
       .requestFullscreen()
       .then(() => {
-        videos[index].isFullscreen = true; // 设置全屏标志
-        handleFullscreenChange(); // 触发全屏状态变化处理函数
+        videos[index].isFullscreen = true;
+        handleFullscreenChange();
+        setTimeout(() => {
+          videoElement.controls = false; // 延迟隐藏控制栏
+        }, 1000); // 1秒后隐藏控制栏
       })
       .catch((err:any) => {
         console.error(
@@ -528,8 +542,9 @@ const toggleFullScreen = (videoElement:any, video:any, index:any) => {
     document
       .exitFullscreen()
       .then(() => {
-        videos.forEach((v:any) => (v.isFullscreen = false)); // 清除所有全屏标志
-        handleFullscreenChange(); // 触发全屏状态变化处理函数
+        videos.forEach((v) => (v.isFullscreen = false));
+        handleFullscreenChange();
+        videoElement.controls = true; // 退出全屏后显示控制栏
       })
       .catch((err) => {
         console.error(
@@ -569,25 +584,6 @@ function handleFullscreenChange() {
 
 document.addEventListener("fullscreenchange", handleFullscreenChange);
 
-// 调整按钮位置以适应全屏模式
-function adjustButtonPositionForFullscreen() {
-  const buttons = document.querySelectorAll(".close-btn");
-  buttons.forEach((button:any) => {
-    button.style.bottom = "5%";
-    button.style.right = "5%";
-    button.style.transform = "translate(50%, 50%)";
-  });
-}
-
-// 从全屏模式恢复按钮位置
-function restoreButtonPositionFromFullscreen() {
-  const buttons = document.querySelectorAll(".close-btn");
-  buttons.forEach((button:any) => {
-    button.style.bottom = "";
-    button.style.right = "";
-    button.style.transform = "";
-  });
-}
 onMounted(() => {
   remoteDesktop(); // 在组件挂载时调用 remoteDesktop 方法
 });
@@ -611,8 +607,6 @@ onBeforeUnmount(() => {
             class="video"
             ref="videoElements"
             :srcObject="video.stream"
-            autoplay
-            controls
             @mousedown="(e) => mouseDown(e, ($refs.videoElements as any[])[index])"
             @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
             @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
@@ -624,7 +618,10 @@ onBeforeUnmount(() => {
               (e) => toggleFullScreen(($refs.videoElements as any[])[index], video, index)
             "
             x5-video-player-type="h5-page"
+            autoplay
+            controls="true"
           ></video>
+          
           <button
             v-if="data.isShowRemoteDesktop"
             class="close-btn"
@@ -648,7 +645,15 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   grid-gap: 10px;
 }
-
+.videoElements {
+  width: 100%;
+  height: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  background: #121212;
+  cursor: none;
+}
 .video-container {
   position: relative;
   width: 100%;
