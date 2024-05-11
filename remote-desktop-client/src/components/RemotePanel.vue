@@ -23,6 +23,7 @@ const data = reactive({
     id: "",
     password: "",
   },
+  screenChangesignal: 0, //用于远控窗口数量
   isShowRemoteDesktop: false,
   isConnecting: false, //连接状态
 });
@@ -136,20 +137,20 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
 
   initRTCDataChannel();
 
-  // 获取本地桌面流s
-  const webcamStream:any = await navigator.mediaDevices.getDisplayMedia({
+  // 获取本地桌面流
+  const webcamStream: any = await navigator.mediaDevices.getDisplayMedia({
     video: true,
     audio: false,
   });
-  screenChangesignal++;
+  data.screenChangesignal++;
   webcamStreamArr.push(webcamStream);
 
   // 点击漂浮栏中的【停止共享】按钮，MediaStream 触发 oninactive 事件，同时 MediaStreamTrack 触发 onended 事件
-  webcamStream.oninactive = (e:any) => {
+  webcamStream.oninactive = (e: any) => {
     console.log("mediaStream oninactive");
 
     console.log(webcamStream);
-    screenChangesignal--;
+    data.screenChangesignal--;
     sendToServer({
       msg_type: MessageType.STOP_SHARING,
       receiver: data.receiverAccount.id,
@@ -158,10 +159,10 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
       }),
       sender: data.account.id,
     });
-    if(screenChangesignal == 0){
+    if (data.screenChangesignal == 0) {
       console.log("共享窗口已全部关闭，界面状态更新");
-    data.isConnecting = false;
-  }
+      data.isConnecting = false;
+    }
   };
 
   webcamStream
@@ -415,42 +416,20 @@ const sendToClient = (msg: Record<string, any>) => {
 </script>
 
 <template>
-  <div
-    v-if="data.isConnecting"
-    class="connecting-message sidebarr"
-    style="position: fixed; top: 0; left: 0; right: 0; bottom: 0"
-  >
-    正在被远控...
+  <div v-if="data.isConnecting" class="connecting-message sidebarr"
+    style="position: fixed; top: 0; left: 0; right: 0; bottom: 0">
+    正在被远控{{ data.screenChangesignal }}个窗口...
   </div>
-  <button
-    v-if="data.isConnecting"
-    class="close-btn"
-    @click="closeRemoteDesktop()"
-  >
-    结束被控
-  </button>
+  <button v-if="data.isConnecting" class="close-btn" @click="closeRemoteDesktop()">结束被控</button>
   <div v-if="!data.isConnecting" class="sidebar">
     <div>
-      <p>
-        address: <span>{{ data.account.id }}</span>
-      </p>
-      <p>
-        password: <span>{{ data.account.password }}</span>
-      </p>
+      <p>address: <span>{{ data.account.id }}</span></p>
+      <p>password: <span>{{ data.account.password }}</span></p>
     </div>
   </div>
-
   <div v-if="!data.isConnecting" class="form">
-    <input
-      v-model="data.receiverAccount.id"
-      type="text"
-      placeholder="请输入对方id"
-    />
-    <input
-      v-model="data.receiverAccount.password"
-      type="text"
-      placeholder="请输入对方密码"
-    />
+    <input v-model="data.receiverAccount.id" type="text" placeholder="请输入对方id" />
+    <input v-model="data.receiverAccount.password" type="text" placeholder="请输入对方密码" />
     <button @click="remoteDesktop()">发起远程</button>
   </div>
 </template>
@@ -468,7 +447,7 @@ const sendToClient = (msg: Record<string, any>) => {
   border-bottom: 1px solid #252525;
   box-sizing: border-box;
 
-  > div {
+  >div {
     background: #242425;
     padding: 10px 20px;
     border-radius: 10px;
@@ -484,6 +463,7 @@ const sendToClient = (msg: Record<string, any>) => {
     }
   }
 }
+
 .connecting-message {
   position: fixed;
   top: 0;
@@ -497,6 +477,7 @@ const sendToClient = (msg: Record<string, any>) => {
   align-items: center;
   font-size: 24px;
 }
+
 .form {
   height: calc(100% - 160px);
   display: flex;
