@@ -7,6 +7,7 @@ import {
   nextTick,
   watch,
   onBeforeUnmount,
+  onUnmounted
 } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
 import { confirm } from "@tauri-apps/api/dialog";
@@ -43,15 +44,56 @@ let ws: WebSocket;
 let pc: RTCPeerConnection;
 let dc: RTCDataChannel;
 let webcamStream: MediaStream;
+let webcamStreamArr: MediaStream[] = [];
 //分辨率
 let remoteDesktopDpi: Record<string, any>;
-
+let unlisten: Function | null = null;
 // 在组件挂载之前执行的异步操作
 onBeforeMount(async () => {
   data.account = await invoke("generate_account");
   initWebSocket();
 });
+onMounted(() => {
+  remoteDesktop(); // 在组件挂载时调用 remoteDesktop 方法
+  appWindow.onCloseRequested(async (event) => {
+    event.preventDefault();
+    closeRemoteDesktop();
+  }).then((unlistenFn: Function) => {
+    unlisten = unlistenFn;
+  });
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("fullscreenchange", handleFullscreenChange);
+});
+onUnmounted(() => {
+  if (unlisten) {
+    unlisten();
+  }
+});
+// 关闭远程桌面
+const closeRemoteDesktop = async () => {
+  const confirmed = await confirm("确认结束被控？", "提示");
+  if (confirmed) {
+    appWindow.setFullscreen(false);
+    data.isShowRemoteDesktop = false;
+    appWindow.close();
 
+    // 停止并移除所有的视频流
+    webcamStreamArr.forEach((stream) => {
+      stream.getTracks().forEach((track) => {
+        track.stop();
+      });
+    });
+    webcamStreamArr = []; // 清空video数组
+    close();
+    sendToServer({
+      msg_type: MessageType.STOP_SHARING,
+      receiver: data.receiverAccount.id,
+      msg: data.receiverAccount.password,
+      sender: data.account.id,
+    });
+  }
+};
 /********************************* connect *************************************/
 
 // 初始化 WebSocket 连接
@@ -446,28 +488,32 @@ const videos:any = reactive([]);
 watch(
   videos,
   (value) => {
-    nextTick(() => {
-      const videos = document.querySelectorAll("video");
-      videos.forEach((video) => {
-        video.addEventListener("click", (event) => {
+    const videos = document.querySelectorAll("video");
+    videos.forEach((video:any) => {
+      const clickHandler = (event:any) => {
+        event.preventDefault(); 
+      };
+      const keydownHandler = (event:any) => {
+        if (event.keyCode === 32 || event.keyCode === 13) {
           event.preventDefault(); 
-        });
-        video.addEventListener("keydown", (event) => {
-          if (event.keyCode === 32 || event.keyCode === 13) {
-            console.log("ss");
-            video.pause();
-            event.preventDefault(); 
-          }
-        });
-      });
+        }
+      };
+      video.addEventListener("click", clickHandler);
+      video.addEventListener("keydown", keydownHandler);
+      
+      // 保存事件处理函数，以便稍后移除
+      video.__clickHandler = clickHandler;
+      video.__keydownHandler = keydownHandler;
     });
   },
   {
     deep: true,
   }
 );
-
-
+videos.forEach((video:any) => {
+  video.removeEventListener("click", video.__clickHandler);
+  video.removeEventListener("keydown", video.__keydownHandler);
+});
 
 let activeVideoIndex = ref(null);
 const setActiveVideo = (index:any) => {
@@ -544,12 +590,7 @@ function handleFullscreenChange() {
 
 document.addEventListener("fullscreenchange", handleFullscreenChange);
 
-onMounted(() => {
-  remoteDesktop(); // 在组件挂载时调用 remoteDesktop 方法
-});
-onBeforeUnmount(() => {
-  document.removeEventListener("fullscreenchange", handleFullscreenChange);
-});
+
 </script>
 <template>
   <div class="container">

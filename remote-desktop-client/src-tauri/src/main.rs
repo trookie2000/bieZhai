@@ -36,7 +36,6 @@
         m.insert("Backspace", Key::Backspace);
         m.insert("CapsLock", Key::CapsLock);
         m.insert("Meta", Key::Meta);
-
         m.insert("F1", Key::F1);
         m.insert("F2", Key::F2);
         m.insert("F3", Key::F3);
