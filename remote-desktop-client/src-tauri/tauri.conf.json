@@ -50,6 +50,7 @@
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
         "timestampUrl": ""
+        
       }
     },
     "security": {   
@@ -58,9 +59,7 @@
     "updater": {
       "active": false
     }
-
     
-
-   
+    
   }
 }

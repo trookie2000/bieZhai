@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, reactive, onBeforeMount } from "vue";
+import { ref, reactive, onBeforeMount, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
-import { confirm } from "@tauri-apps/api/dialog";
+import { confirm, } from "@tauri-apps/api/dialog";
 import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
 // import TauriWebsocket from 'tauri-plugin-websocket-api';
 // import WebSocket from "tauri-plugin-websocket-api";
@@ -38,12 +38,28 @@ let dc: RTCDataChannel;
 let webcamStreamArr: MediaStream[] = [];
 //分辨率
 let remoteDesktopDpi: Record<string, any>;
-
-// 在组件挂载之前执行的异步操作
+let unlisten: Function | null = null;
 onBeforeMount(async () => {
   data.account = await invoke("generate_account");
   initWebSocket();
 });
+onMounted(() => {
+  appWindow.onCloseRequested(async (event) => {
+    event.preventDefault();
+    closeRemoteDesktop();
+  }).then((unlistenFn: Function) => {
+    unlisten = unlistenFn;
+  });
+});
+
+// 在组件卸载时取消监听器
+onUnmounted(() => {
+  if (unlisten) {
+    unlisten();
+  }
+});
+
+//   data.account = await invoke("generate_account");
 
 /********************************* connect *************************************/
 
@@ -360,9 +376,17 @@ const closeRemoteDesktop = async () => {
     appWindow.setFullscreen(false);
     data.isShowRemoteDesktop = false;
     appWindow.close();
+
+    // 停止并移除所有的视频流
+    webcamStreamArr.forEach((stream) => {
+      stream.getTracks().forEach((track) => {
+        track.stop();
+      });
+    });
+    webcamStreamArr = []; // 清空video数组
     close();
     sendToServer({
-      msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
+      msg_type: MessageType.STOP_SHARING,
       receiver: data.receiverAccount.id,
       msg: data.receiverAccount.password,
       sender: data.account.id,
@@ -370,27 +394,17 @@ const closeRemoteDesktop = async () => {
   }
 };
 
+// const unlisten = await appWindow.onCloseRequested((event) => {
+//   const confirmed = confirm('Are you sure?');
+//   if (!confirmed) {
+//     // user did not confirm closing the window; let's prevent it
+//     event.preventDefault();
+//   }
+// });
 // 关闭远程桌面
 const close = (msg?: Record<string, any>) => {
   const id = JSON.parse(msg?.msg).id;
   console.log(id);
-
-  // 检查 desktop.value 是否存在
-  // if (desktop.value) {
-  //   if (desktop.value.srcObject) {
-  //     const tracks = desktop.value.srcObject as MediaStream;
-  //     tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-  //     desktop.value.srcObject = null;
-  //   }
-  // } else {
-  //   if (webcamStream) {
-  //     webcamStream
-  //       .getTracks()
-  //       .forEach((track: MediaStreamTrack) => track.stop());
-  //   }
-  // }
-  // // 关闭 Peer 连接
-  // pc.close();
 
   if (msg) {
     const stream = webcamStreamArr.find((item) => (item.id == id));
@@ -413,6 +427,19 @@ const sendToClient = (msg: Record<string, any>) => {
   let msgJSON = JSON.stringify(msg);
   dc.readyState == "open" && dc.send(msgJSON);
 };
+
+// onMounted(async () => {
+//   const unlisten = await appWindow.onCloseRequested(async (event) => {
+//   const confirmed = await confirm('Are you sure?');
+//   if (!confirmed) {
+//     // user did not confirm closing the window; let's prevent it
+//     event.preventDefault();
+//   }
+// });
+
+// you need to call unlisten if your handler goes out of scope e.g. the component is unmounted
+
+
 </script>
 
 <template>
@@ -420,7 +447,7 @@ const sendToClient = (msg: Record<string, any>) => {
     style="position: fixed; top: 0; left: 0; right: 0; bottom: 0">
     正在被远控{{ data.screenChangesignal }}个窗口...
   </div>
-  <button v-if="data.isConnecting" class="close-btn" @click="closeRemoteDesktop()">结束被控</button>
+  <button v-if="data.isConnecting" class="close-btn" @click="closeRemoteDesktop()">结束所有被控</button>
   <div v-if="!data.isConnecting" class="sidebar">
     <div>
       <p>address: <span>{{ data.account.id }}</span></p>
