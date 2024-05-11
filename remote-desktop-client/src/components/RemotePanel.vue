@@ -121,7 +121,8 @@ const handleNewICECandidateMsg = async (msg: Record<string, any>) => {
     reportError(err);
   }
 };
-
+//此标记用于判定remotePanel页面为正在被共享还是初始状态，若screenChangesignal为0，则表示共享窗口全部关闭
+let screenChangesignal = 0;
 // 处理远程桌面请求消息
 const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
   if (msg.msg != data.account.password) {
@@ -140,7 +141,7 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
     video: true,
     audio: false,
   });
-
+  screenChangesignal++;
   webcamStreamArr.push(webcamStream);
 
   // 点击漂浮栏中的【停止共享】按钮，MediaStream 触发 oninactive 事件，同时 MediaStreamTrack 触发 onended 事件
@@ -148,7 +149,7 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
     console.log("mediaStream oninactive");
 
     console.log(webcamStream);
-
+    screenChangesignal--;
     sendToServer({
       msg_type: MessageType.STOP_SHARING,
       receiver: data.receiverAccount.id,
@@ -157,7 +158,10 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
       }),
       sender: data.account.id,
     });
+    if(screenChangesignal == 0){
+      console.log("共享窗口已全部关闭，界面状态更新");
     data.isConnecting = false;
+  }
   };
 
   webcamStream

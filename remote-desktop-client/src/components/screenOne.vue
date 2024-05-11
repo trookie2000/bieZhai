@@ -86,9 +86,6 @@ const initWebSocket = () => {
       case MessageType.REMOTE_DESKTOP:
         handleRemoteDesktopRequest(msg);
         break;
-      case MessageType.CLOSE_REMOTE_DESKTOP:
-        close();
-        break;
       case MessageType.STOP_SHARING:
         closeVideoByMacAddress(msg);
         break;
@@ -99,7 +96,7 @@ const initWebSocket = () => {
     console.log("WebSocket 连接错误:", e);
   };
 };
-
+//当共享方关闭漂浮栏中的按钮后通知远控方video关闭
 function closeVideoByMacAddress(msg: Record<string, any>) {
   const id = JSON.parse(msg.msg).id;
   const video = videos.find((item:any) => {
@@ -350,33 +347,9 @@ const remoteDesktop = async () => {
   }, 0);
 };
 
-// // 关闭远程桌面
-// const closeRemoteDesktop = async () => {
-//   const confirmed = await confirm('是否确认关闭', '提示');
-//   if (confirmed) {
-//     appWindow.setFullscreen(false);
-//     data.isShowRemoteDesktop = false;
-//     appWindow.close();
-//     close();
-//     sendToServer({
-//       msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
-//       receiver: data.receiverAccount.id,
-//       msg: data.receiverAccount.password,
-//       sender: data.account.id,
-//     });
-//   }
-// };
+
 const closeVideo = (video:any) => {
   console.log("Closing video with ID:", videos);
-
-  // 停止视频流
-  // const videoStream = video.stream;
-  // if (videoStream) {
-  //   videoStream.getTracks().forEach((track) => {
-  //     console.log("Stopping track:", video.id);
-  //     track.stop(); // 停止该流的所有轨道
-  //   });
-  // }
 
   // 从数组中移除该视频对象
   const index = videos.findIndex((v:any) => v.id === video.id);
@@ -454,20 +427,7 @@ const mouseType = (mouseStatus: MouseStatus, button: number) => {
   return type;
 };
 
-// 关闭远程桌面
-const close = () => {
-  console.log("close ......");
 
-  // if (desktop.value!.srcObject) {
-  //   const tracks = desktop.value!.srcObject as MediaStream;
-  //   tracks.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-  //   desktop.value!.srcObject = null;
-  // } else {
-  //   webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-  // }
-  // // 关闭 Peer 连接
-  // pc.close();
-};
 const videoElements = ref<any[]>([]);
 
 // 发送消息给服务器
@@ -684,40 +644,4 @@ video {
   transform: translate(50%, 50%);
 }
 
-/* 隐藏video 播放按钮 */
-/* 
-.video::-webkit-media-controls-play-button {
-  pointer-events: none; 
-}
-.video::-webkit-media-controls-start-playback-button {
-  pointer-events: none; 
-}
-.video::-webkit-media-controls-enclosure { 
-  pointer-events: none; 
-}
-
-.video::-webkit-media-controls-timeline {
-  display: none;
-}
-
-.video::-webkit-media-controls-current-time-display {
-  display: none;            
-}
-
-.video::-webkit-media-controls-time-remaining-display {
-  display: none;            
-}
-
-.video::-webkit-media-controls-mute-button {
-  display: none;            
-}
-.video::-webkit-media-controls-toggle-closed-captions-button {
-  display: none;            
-}
-
-.video::-webkit-media-controls-volume-slider {
-  display: none;            
-}
-
-*/
 </style>
