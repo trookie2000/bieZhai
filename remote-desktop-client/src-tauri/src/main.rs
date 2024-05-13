@@ -28,7 +28,7 @@
         m.insert("Escape", Key::Escape);
         m.insert("End", Key::End);
         m.insert("Home", Key::Home);
-        m.insert(" ", Key::Space);
+        m.insert("Space", Key::Space);
         m.insert("Enter", Key::Return);
         m.insert("Shift", Key::Shift);
         m.insert("Tab", Key::Tab);
