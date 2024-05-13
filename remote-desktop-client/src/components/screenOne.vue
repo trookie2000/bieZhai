@@ -36,8 +36,6 @@ const data = reactive({
   isConnecting: false, //连接状态
 });
 
-// 对象用于引用视频元素，DOM对象s
-const desktop = ref<HTMLVideoElement>();
 
 // WebSocket 连接和RTC其他变量
 let ws: WebSocket;
@@ -72,7 +70,7 @@ onUnmounted(() => {
 });
 // 关闭远程桌面
 const closeRemoteDesktop = async () => {
-  const confirmed = await confirm("确认结束被控？", "提示");
+  const confirmed = await confirm("确认？", "提示");
   if (confirmed) {
     appWindow.setFullscreen(false);
     data.isShowRemoteDesktop = false;
@@ -141,7 +139,7 @@ const initWebSocket = () => {
 //当共享方关闭漂浮栏中的按钮后通知远控方video关闭
 function closeVideoByMacAddress(msg: Record<string, any>) {
   const id = JSON.parse(msg.msg).id;
-  const video = videos.find((item:any) => {
+  const video = videos.find((item: any) => {
     return item.stream.id == id;
   });
 
@@ -269,7 +267,7 @@ const handleSignalingStateChangeEvent = (event: Event) => {
 
 // 获取数据流事件处理
 // 处理新视频流事件
-const handleTrackEvent = (event:any) => {
+const handleTrackEvent = (event: any) => {
   console.log(event.streams);
 
   const stream = event.streams[0];
@@ -278,7 +276,7 @@ const handleTrackEvent = (event:any) => {
   // 使用 nextTick 来确保 DOM 更新
   nextTick(() => {
     const elems = videoElements.value; // 确保你有正确的 ref 指向视频元素数组
-    const elem:any = elems[elems.length - 1];
+    const elem: any = elems[elems.length - 1];
     if (elem) {
       elem.srcObject = stream;
     } else {
@@ -390,11 +388,11 @@ const remoteDesktop = async () => {
 };
 
 
-const closeVideo = (video:any) => {
+const closeVideo = (video: any) => {
   console.log("Closing video with ID:", videos);
 
   // 从数组中移除该视频对象
-  const index = videos.findIndex((v:any) => v.id === video.id);
+  const index = videos.findIndex((v: any) => v.id === video.id);
   if (index !== -1) {
     sendToServer({
       msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
@@ -411,47 +409,71 @@ const closeVideo = (video:any) => {
 };
 
 // 鼠标事件处理改动，传递事件对象和视频元素
-const mouseDown = (e:any, videoElement:any) => {
+const mouseDown = (e: any, videoElement: any) => {
   sendMouseEvent(e, videoElement, mouseType(MouseStatus.MOUSE_DOWN, e.button));
 };
 
-const mouseUp = (e:any, videoElement:any) => {
+const mouseUp = (e: any, videoElement: any) => {
   sendMouseEvent(e, videoElement, mouseType(MouseStatus.MOUSE_UP, e.button));
 };
 
-const mouseMove = (e:any, videoElement:any) => {
+const mouseMove = (e: any, videoElement: any) => {
   sendMouseEvent(e, videoElement, MouseStatus.MOUSE_MOVE);
 };
 
-const wheel = (e:any, videoElement:any) => {
+const wheel = (e: any, videoElement: any) => {
   const type = e.deltaY > 0 ? WheelStatus.WHEEL_DOWN : WheelStatus.WHEEL_UP;
   sendMouseEvent(e, videoElement, type);
 };
 
-const rightClick = (e:any, videoElement:any) => {
+const rightClick = (e: any, videoElement: any) => {
   sendMouseEvent(e, videoElement, MouseStatus.RIGHT_CLICK);
 };
 
 // 更新后的 sendMouseEvent 函数
-const sendMouseEvent = (e:any, videoElement:any, eventType:any) => {
-  const x = e.clientX;
-  const y = e.clientY;
+let lastMouseX = 0;
+let lastMouseY = 0;
+let lastTimestamp = 0;
+const sendMouseEvent = (e: MouseEvent, videoElement: HTMLVideoElement, eventType: string) => {
   if (!videoElement) return;
 
-  const widthRatio = remoteDesktopDpi.width / videoElement.clientWidth;
-  const heightRatio = remoteDesktopDpi.height / videoElement.clientHeight;
+  // 获取远程桌面的实际尺寸
+  const desktopWidth = remoteDesktopDpi.width;
+  const desktopHeight = remoteDesktopDpi.height;
 
-  const data = {
-    x: Math.round(x * widthRatio),
-    y: Math.round(y * heightRatio),
-    eventType: eventType,
-  };
+  // 计算鼠标相对于视频元素的位置
+  const xRatio = desktopWidth / videoElement.offsetWidth;
+  const yRatio = desktopHeight / videoElement.offsetHeight;
+  const x = Math.round(e.offsetX * xRatio);
+  const y = Math.round(e.offsetY * yRatio);
 
+  // 计算鼠标移动的速度
+  const now = performance.now();
+  const deltaTime = now - lastTimestamp;
+  const deltaX = x - lastMouseX;
+  const deltaY = y - lastMouseY;
+  const speedX = deltaX / deltaTime;
+  const speedY = deltaY / deltaTime;
+
+  // 发送鼠标事件给客户端
   sendToClient({
     type: InputEventType.MOUSE_EVENT,
-    data: data,
+    data: {
+      x: x,
+      y: y,
+      speedX: speedX,
+      speedY: speedY,
+      eventType: eventType,
+    },
   });
+
+  // 更新上一次鼠标位置和时间戳
+  lastMouseX = x;
+  lastMouseY = y;
+  lastTimestamp = now;
 };
+
+
 
 // 获取鼠标事件类型
 const mouseType = (mouseStatus: MouseStatus, button: number) => {
@@ -483,24 +505,24 @@ const sendToClient = (msg: Record<string, any>) => {
   let msgJSON = JSON.stringify(msg);
   dc.readyState == "open" && dc.send(msgJSON);
 };
-const videos:any = reactive([]);
+const videos: any = reactive([]);
 //
 watch(
   videos,
   (value) => {
     const videos = document.querySelectorAll("video");
-    videos.forEach((video:any) => {
-      const clickHandler = (event:any) => {
-        event.preventDefault(); 
+    videos.forEach((video: any) => {
+      const clickHandler = (event: any) => {
+        event.preventDefault();
       };
-      const keydownHandler = (event:any) => {
+      const keydownHandler = (event: any) => {
         if (event.keyCode === 32 || event.keyCode === 13) {
-          event.preventDefault(); 
+          event.preventDefault();
         }
       };
       video.addEventListener("click", clickHandler);
       video.addEventListener("keydown", keydownHandler);
-      
+
       // 保存事件处理函数，以便稍后移除
       video.__clickHandler = clickHandler;
       video.__keydownHandler = keydownHandler;
@@ -510,17 +532,17 @@ watch(
     deep: true,
   }
 );
-videos.forEach((video:any) => {
+videos.forEach((video: any) => {
   video.removeEventListener("click", video.__clickHandler);
   video.removeEventListener("keydown", video.__keydownHandler);
 });
 
 let activeVideoIndex = ref(null);
-const setActiveVideo = (index:any) => {
+const setActiveVideo = (index: any) => {
   activeVideoIndex.value = index;
 };
 
-const addVideo = (stream:any) => {
+const addVideo = (stream: any) => {
   const videoObj = {
     id: Date.now().toString(), // 使用时间戳生成唯一ID
     stream,
@@ -528,7 +550,7 @@ const addVideo = (stream:any) => {
   };
   videos.push(videoObj);
 };
-const toggleFullScreen = (videoElement:any, vide:any, index:any) => {
+const toggleFullScreen = (videoElement: any, vide: any, index: any) => {
   if (!document.fullscreenElement) {
     videoElement
       .requestFullscreen()
@@ -537,9 +559,10 @@ const toggleFullScreen = (videoElement:any, vide:any, index:any) => {
         handleFullscreenChange();
         setTimeout(() => {
           videoElement.controls = false; // 延迟隐藏控制栏
-        }, 1000); // 1秒后隐藏控制栏
+        }, 10); // 1秒后隐藏控制栏
+        console.log("控制栏隐藏");
       })
-      .catch((err:any) => {
+      .catch((err: any) => {
         console.error(
           `Error attempting to enable full-screen mode: ${err.message} (${err.name})`
         );
@@ -548,7 +571,7 @@ const toggleFullScreen = (videoElement:any, vide:any, index:any) => {
     document
       .exitFullscreen()
       .then(() => {
-        videos.forEach((v:any) => (v.isFullscreen = false));
+        videos.forEach((v: any) => (v.isFullscreen = false));
         handleFullscreenChange();
         videoElement.controls = true; // 退出全屏后显示控制栏
       })
@@ -567,6 +590,16 @@ const toggleFullScreen = (videoElement:any, vide:any, index:any) => {
 //     },
 // 添加变量用于跟踪视频是否在全屏模式下
 const isVideoFullscreen = ref(false);
+const setWindowTop = (index: any) => {
+  console.log("窗口被置于顶层");
+  videos.forEach((v: any, i: any) => {
+    if (i === index) {
+      v.isTop = true;
+    } else {
+      v.isTop = false;
+    }
+  });
+};
 
 // 监听视频全屏状态变化
 document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -577,7 +610,7 @@ function handleFullscreenChange() {
 
   // 更新按钮位置和样式
   const buttons = document.querySelectorAll(".close-btn");
-  buttons.forEach((button:any) => {
+  buttons.forEach((button: any) => {
     if (isVideoFullscreen.value) {
       button.style.bottom = "20px";
       button.style.right = "20px";
@@ -595,38 +628,21 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 <template>
   <div class="container">
     <div class="video-grid">
-      <div
-        v-for="(video, index) in videos"
-        :key="video.id"
-        class="video-container"
-        :class="{ fullscreen: video.isFullscreen }"
-        @click="setActiveVideo(index)"
-      >
-        <div class="video-wrapper">
-          <video
-            v-show="data.isShowRemoteDesktop"
-            class="video"
-            ref="videoElements"
-            :srcObject="video.stream"
+      <div v-for="(video, index) in videos" :key="video.id" class="video-wrapper" :class="{ isTop: video.isTop }"
+        @click="setActiveVideo(index)">
+        <div class="video-container">
+          <video v-show="data.isShowRemoteDesktop" class="video" ref="videoElements" :srcObject="video.stream"
             @mousedown="(e) => mouseDown(e, ($refs.videoElements as any[])[index])"
             @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
             @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
-            @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])"
-            @contextmenu.prevent="
-              (e) => rightClick(e, ($refs.videoElements as any[])[index])
-            "
-            @dblclick="
-              (e) => toggleFullScreen(($refs.videoElements as any[])[index], video, index)
-            "
-            x5-video-player-type="h5-page"
-            autoplay
-          ></video>
-          
-          <button
-            v-if="data.isShowRemoteDesktop"
-            class="close-btn"
-            @click="closeVideo(video)"
-          >
+            @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])" @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
+        " @dblclick="(e) => {
+        toggleFullScreen(($refs.videoElements as any[])[index], video, index);
+        setWindowTop(index);
+      }
+        " x5-video-player-type="h5-page" autoplay controls></video>
+
+          <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeVideo(video)">
             关闭
           </button>
         </div>
@@ -634,6 +650,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
     </div>
   </div>
 </template>
+
 
 <style lang="less" scoped>
 .container {
@@ -645,6 +662,14 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   grid-gap: 10px;
 }
+
+.video-wrapper.isTop {
+  z-index: 9999;
+}
+
+video::-webkit-media-controls {
+  display: none !important;
+}
 .videoElements {
   width: 100%;
   height: 100%;
@@ -654,6 +679,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
   background: #121212;
   cursor: none;
 }
+
 .video-container {
   position: relative;
   width: 100%;
@@ -684,5 +710,4 @@ video {
   right: 20px;
   transform: translate(50%, 50%);
 }
-
 </style>

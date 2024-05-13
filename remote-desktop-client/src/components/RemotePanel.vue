@@ -546,6 +546,7 @@ button {
   left: 0;
   background: #121212;
   cursor: none;
+  z-index: 9999;
 }
 
 .close-btn {
