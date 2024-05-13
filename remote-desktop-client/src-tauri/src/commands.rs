@@ -114,6 +114,9 @@ pub fn key_event(event_type: &str, key: &str) {
         "key-click" => {
             enigo.key_click(k);
         }
+        "enter" => {
+            enigo.key_down(k);
+        }
         _ => {}
     }
 }

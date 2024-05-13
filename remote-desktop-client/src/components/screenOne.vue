@@ -667,7 +667,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
   z-index: 9999;
 }
 
-video::-webkit-media-controls {
+video::-webkit-media-controls-enclosure {
   display: none !important;
 }
 .videoElements {
