@@ -516,8 +516,11 @@ watch(
         event.preventDefault();
       };
       const keydownHandler = (event: any) => {
-        if (event.keyCode === 32 || event.keyCode === 13) {
+        if (event.keyCode === 32) {
           video.pause();
+          event.preventDefault();
+        }
+        if (event.keyCode === 13) {
           event.preventDefault();
         }
       };
