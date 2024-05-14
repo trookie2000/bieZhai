@@ -60,9 +60,6 @@ onMounted(() => {
     unlisten = unlistenFn;
   });
 });
-onBeforeUnmount(() => {
-  document.removeEventListener("fullscreenchange", handleFullscreenChange);
-});
 onUnmounted(() => {
   if (unlisten) {
     unlisten();
@@ -201,11 +198,17 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
       video: true,
       audio: false,
     });
+    console.log("ss");
 
     webcamStream
       .getTracks()
       .forEach((track: MediaStreamTrack) => pc.addTrack(track, webcamStream));
-
+    webcamStream.getVideoTracks()[0].onended = () => {
+      let videoTrack = webcamStream.getVideoTracks()[0];
+      let settings = videoTrack.getSettings();
+      console.log('Video width:', settings.width);
+      console.log('Video height:', settings.height);
+    };
     sendOffer();
   } catch (error) {
     console.error("处理远程桌面请求时出错:", error);
@@ -351,6 +354,9 @@ const initRTCDataChannel = () => {
       case InputEventType.KEY_EVENT:
         handleKeyboardEvent(msg.data);
         break;
+      case InputEventType.Z_INDEX:
+        // toggleFullScreen(msg.data);
+        break;
     }
   };
 
@@ -434,46 +440,74 @@ const rightClick = (e: any, videoElement: any) => {
 let lastMouseX = 0;
 let lastMouseY = 0;
 let lastTimestamp = 0;
-const sendMouseEvent = (e: MouseEvent, videoElement: HTMLVideoElement, eventType: string) => {
+// const sendMouseEvent = (e: MouseEvent, videoElement: HTMLVideoElement, eventType: string) => {
+//   if (!videoElement) return;
+
+//   // 获取远程桌面的实际尺寸
+//   const desktopWidth = remoteDesktopDpi.width;
+//   const desktopHeight = remoteDesktopDpi.height;
+
+//   // 计算鼠标相对于视频元素的位置
+//   const xRatio = desktopWidth / videoElement.offsetWidth;
+//   const yRatio = desktopHeight / videoElement.offsetHeight;
+//   const x = Math.round(e.offsetX * xRatio);
+//   const y = Math.round(e.offsetY * yRatio);
+
+//   // 计算鼠标移动的速度
+//   const now = performance.now();
+//   const deltaTime = now - lastTimestamp;
+//   const deltaX = x - lastMouseX;
+//   const deltaY = y - lastMouseY;
+//   const speedX = deltaX / deltaTime;
+//   const speedY = deltaY / deltaTime;
+
+//   // 发送鼠标事件给客户端
+//   sendToClient({
+//     type: InputEventType.MOUSE_EVENT,
+//     data: {
+//       x: x,
+//       y: y,
+//       speedX: speedX,
+//       speedY: speedY,
+//       eventType: eventType,
+//     },
+//   });
+
+//   // 更新上一次鼠标位置和时间戳
+//   lastMouseX = x;
+//   lastMouseY = y;
+//   lastTimestamp = now;
+// };
+
+const sendMouseEvent = (e: any, videoElement: any, eventType: any) => {
+  const x = e.clientX;
+  const y = e.clientY;
   if (!videoElement) return;
 
-  // 获取远程桌面的实际尺寸
-  const desktopWidth = remoteDesktopDpi.width;
-  const desktopHeight = remoteDesktopDpi.height;
+  let widthRatio, heightRatio;
+  if (document.fullscreenElement === videoElement) {
 
-  // 计算鼠标相对于视频元素的位置
-  const xRatio = desktopWidth / videoElement.offsetWidth;
-  const yRatio = desktopHeight / videoElement.offsetHeight;
-  const x = Math.round(e.offsetX * xRatio);
-  const y = Math.round(e.offsetY * yRatio);
+    // 视频处于全屏状态
+    const rect = videoElement.getBoundingClientRect();
+    widthRatio = remoteDesktopDpi.width / rect.width;
+    heightRatio = remoteDesktopDpi.height / rect.height;
+  } else {
+    // 视频不处于全屏状态
+    widthRatio = remoteDesktopDpi.width / videoElement.clientWidth;
+    heightRatio = remoteDesktopDpi.height / videoElement.clientHeight;
+  }
 
-  // 计算鼠标移动的速度
-  const now = performance.now();
-  const deltaTime = now - lastTimestamp;
-  const deltaX = x - lastMouseX;
-  const deltaY = y - lastMouseY;
-  const speedX = deltaX / deltaTime;
-  const speedY = deltaY / deltaTime;
+  const data = {
+    x: Math.round(x * widthRatio),
+    y: Math.round(y * heightRatio),
+    eventType: eventType,
+  };
 
-  // 发送鼠标事件给客户端
   sendToClient({
     type: InputEventType.MOUSE_EVENT,
-    data: {
-      x: x,
-      y: y,
-      speedX: speedX,
-      speedY: speedY,
-      eventType: eventType,
-    },
+    data: data,
   });
-
-  // 更新上一次鼠标位置和时间戳
-  lastMouseX = x;
-  lastMouseY = y;
-  lastTimestamp = now;
 };
-
-
 
 // 获取鼠标事件类型
 const mouseType = (mouseStatus: MouseStatus, button: number) => {
@@ -560,23 +594,24 @@ const toggleFullScreen = (videoElement: any, vide: any, index: any) => {
       .requestFullscreen()
       .then(() => {
         videos[index].isFullscreen = true;
-        handleFullscreenChange();
-        setTimeout(() => {
-          videoElement.controls = false; // 延迟隐藏控制栏
-        }, 10); // 1秒后隐藏控制栏
-        console.log("控制栏隐藏");
       })
       .catch((err: any) => {
         console.error(
           `Error attempting to enable full-screen mode: ${err.message} (${err.name})`
         );
       });
+    sendToClient({
+      type: InputEventType.KEY_EVENT,
+      data: {
+        eventType: KeyboardStatus.MOUSE_DOWN,
+        key: index,
+      },
+    });
   } else {
     document
       .exitFullscreen()
       .then(() => {
         videos.forEach((v: any) => (v.isFullscreen = false));
-        handleFullscreenChange();
         videoElement.controls = true; // 退出全屏后显示控制栏
       })
       .catch((err) => {
@@ -605,27 +640,7 @@ const setWindowTop = (index: any) => {
   });
 };
 
-// 监听视频全屏状态变化
-document.addEventListener("fullscreenchange", handleFullscreenChange);
 
-// 处理视频全屏状态变化
-function handleFullscreenChange() {
-  isVideoFullscreen.value = document.fullscreenElement !== null;
-
-  // 更新按钮位置和样式
-  const buttons = document.querySelectorAll(".close-btn");
-  buttons.forEach((button: any) => {
-    if (isVideoFullscreen.value) {
-      button.style.bottom = "20px";
-      button.style.right = "20px";
-    } else {
-      button.style.bottom = "5%";
-      button.style.right = "5%";
-    }
-  });
-}
-
-document.addEventListener("fullscreenchange", handleFullscreenChange);
 
 
 </script>
@@ -672,8 +687,10 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 }
 
 video::-webkit-media-controls-enclosure {
+  /*禁用播放器控制栏的样式*/
   display: none !important;
 }
+
 .videoElements {
   width: 100%;
   height: 100%;

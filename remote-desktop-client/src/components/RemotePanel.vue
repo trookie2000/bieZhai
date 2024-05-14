@@ -13,6 +13,7 @@ import {
   InputEventType,
 } from "../common/Constans";
 import { handleKeyboardEvent, handleMouseEvent } from "../common/InputEvent";
+
 // 用于存储响应式数据的对象
 const data = reactive({
   account: {
@@ -187,6 +188,7 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
 
   sendOffer();
 };
+
 
 // 初始化 RTCPeerConnections
 const initRTCPeerConnection = () => {
@@ -394,13 +396,6 @@ const closeRemoteDesktop = async () => {
   }
 };
 
-// const unlisten = await appWindow.onCloseRequested((event) => {
-//   const confirmed = confirm('Are you sure?');
-//   if (!confirmed) {
-//     // user did not confirm closing the window; let's prevent it
-//     event.preventDefault();
-//   }
-// });
 // 关闭远程桌面
 const close = (msg?: Record<string, any>) => {
   const id = JSON.parse(msg?.msg).id;
@@ -427,17 +422,6 @@ const sendToClient = (msg: Record<string, any>) => {
   let msgJSON = JSON.stringify(msg);
   dc.readyState == "open" && dc.send(msgJSON);
 };
-
-// onMounted(async () => {
-//   const unlisten = await appWindow.onCloseRequested(async (event) => {
-//   const confirmed = await confirm('Are you sure?');
-//   if (!confirmed) {
-//     // user did not confirm closing the window; let's prevent it
-//     event.preventDefault();
-//   }
-// });
-
-// you need to call unlisten if your handler goes out of scope e.g. the component is unmounted
 
 
 </script>

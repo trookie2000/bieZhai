@@ -32,6 +32,7 @@ enum MessageType {
 enum InputEventType {
     MOUSE_EVENT = "mouse-event",   // 鼠标事件
     KEY_EVENT = "key-event",       // 键盘事件
+    Z_INDEX = "z-index", //窗口置顶
 }
 
 // 命令枚举，用于标识不同类型的命令
