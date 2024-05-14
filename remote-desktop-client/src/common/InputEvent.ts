@@ -15,5 +15,15 @@ const handleKeyboardEvent = async (data: Record<string, any>) => {
     await invoke(Command.KEY_EVENT, data);
 };
 
+// 执行与键盘事件相关的命令
+const handleWindowTop = async (data: Record<string, any>) => {
+    await invoke(Command.WINDOW_EVENT, data);
+};
+
+const handleGetTopWindowInfo = async () => {
+    return await invoke(Command.TOP_WINDOW_EVENT);
+};
+
+
 // 导出处理鼠标事件和键盘事件的函数，以便其他模块可以使用它们
-export { handleMouseEvent, handleKeyboardEvent };
+export { handleMouseEvent, handleKeyboardEvent, handleWindowTop, handleGetTopWindowInfo };

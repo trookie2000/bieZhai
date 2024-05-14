@@ -7,7 +7,7 @@ import {
   nextTick,
   watch,
   onBeforeUnmount,
-  onUnmounted
+  onUnmounted,
 } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
 import { confirm } from "@tauri-apps/api/dialog";
@@ -20,7 +20,7 @@ import {
   MessageType,
   InputEventType,
 } from "../common/Constans";
-import { handleKeyboardEvent, handleMouseEvent } from "../common/InputEvent";
+import { handleKeyboardEvent, handleMouseEvent, handleWindowTop } from "../common/InputEvent";
 
 // 用于存储响应式数据的对象
 const data = reactive({
@@ -35,7 +35,6 @@ const data = reactive({
   isShowRemoteDesktop: false,
   isConnecting: false, //连接状态
 });
-
 
 // WebSocket 连接和RTC其他变量
 let ws: WebSocket;
@@ -53,12 +52,14 @@ onBeforeMount(async () => {
 });
 onMounted(() => {
   remoteDesktop(); // 在组件挂载时调用 remoteDesktop 方法
-  appWindow.onCloseRequested(async (event) => {
-    event.preventDefault();
-    closeRemoteDesktop();
-  }).then((unlistenFn: Function) => {
-    unlisten = unlistenFn;
-  });
+  appWindow
+    .onCloseRequested(async (event) => {
+      event.preventDefault();
+      closeRemoteDesktop();
+    })
+    .then((unlistenFn: Function) => {
+      unlisten = unlistenFn;
+    });
 });
 onBeforeUnmount(() => {
   document.removeEventListener("fullscreenchange", handleFullscreenChange);
@@ -96,7 +97,7 @@ const closeRemoteDesktop = async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://10.134.169.24:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://192.168.1.2:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -310,6 +311,7 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
   data.isConnecting = false;
   dc = e.channel;
   dc.onopen = (e: Event) => {
+    console.log(e);
     console.log("数据通道已打开");
   };
 
@@ -387,7 +389,6 @@ const remoteDesktop = async () => {
   }, 0);
 };
 
-
 const closeVideo = (video: any) => {
   console.log("Closing video with ID:", videos);
 
@@ -434,7 +435,11 @@ const rightClick = (e: any, videoElement: any) => {
 let lastMouseX = 0;
 let lastMouseY = 0;
 let lastTimestamp = 0;
-const sendMouseEvent = (e: MouseEvent, videoElement: HTMLVideoElement, eventType: string) => {
+const sendMouseEvent = (
+  e: MouseEvent,
+  videoElement: HTMLVideoElement,
+  eventType: string
+) => {
   if (!videoElement) return;
 
   // 获取远程桌面的实际尺寸
@@ -473,8 +478,6 @@ const sendMouseEvent = (e: MouseEvent, videoElement: HTMLVideoElement, eventType
   lastTimestamp = now;
 };
 
-
-
 // 获取鼠标事件类型
 const mouseType = (mouseStatus: MouseStatus, button: number) => {
   let type = "";
@@ -490,7 +493,6 @@ const mouseType = (mouseStatus: MouseStatus, button: number) => {
 
   return type;
 };
-
 
 const videoElements = ref<any[]>([]);
 
@@ -626,27 +628,44 @@ function handleFullscreenChange() {
 }
 
 document.addEventListener("fullscreenchange", handleFullscreenChange);
-
-
 </script>
 <template>
   <div class="container">
     <div class="video-grid">
-      <div v-for="(video, index) in videos" :key="video.id" class="video-wrapper" :class="{ isTop: video.isTop }"
-        @click="setActiveVideo(index)">
+      <div
+        v-for="(video, index) in videos"
+        :key="video.id"
+        class="video-wrapper"
+        :class="{ isTop: video.isTop }"
+        @click="setActiveVideo(index)"
+      >
         <div class="video-container">
-          <video v-show="data.isShowRemoteDesktop" class="video" ref="videoElements" :srcObject="video.stream"
+          <video
+            v-show="data.isShowRemoteDesktop"
+            class="video"
+            ref="videoElements"
+            :srcObject="video.stream"
             @mousedown="(e) => mouseDown(e, ($refs.videoElements as any[])[index])"
             @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
             @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
-            @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])" @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
-        " @dblclick="(e) => {
+            @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])"
+            @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
+        "
+            @dblclick="(e) => {
         toggleFullScreen(($refs.videoElements as any[])[index], video, index);
         setWindowTop(index);
       }
-        " x5-video-player-type="h5-page" autoplay controls></video>
+        "
+            x5-video-player-type="h5-page"
+            autoplay
+            controls
+          ></video>
 
-          <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeVideo(video)">
+          <button
+            v-if="data.isShowRemoteDesktop"
+            class="close-btn"
+            @click="closeVideo(video)"
+          >
             关闭
           </button>
         </div>
@@ -654,7 +673,6 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
     </div>
   </div>
 </template>
-
 
 <style lang="less" scoped>
 .container {

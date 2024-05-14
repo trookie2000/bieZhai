@@ -32,12 +32,15 @@ enum MessageType {
 enum InputEventType {
     MOUSE_EVENT = "mouse-event",   // 鼠标事件
     KEY_EVENT = "key-event",       // 键盘事件
+    WINDOW_EVENT = "window-event"
 }
 
 // 命令枚举，用于标识不同类型的命令
 enum Command {
     MOUSE_EVENT = "mouse_event",   // 鼠标事件命令
     KEY_EVENT = "key_event",       // 键盘事件命令
+    WINDOW_EVENT = "set_window_topmost",
+    TOP_WINDOW_EVENT = "get_top_window_info"
 }
 
 // 导出枚举和常量，使其在其他地方可以使用

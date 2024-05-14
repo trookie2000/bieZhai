@@ -1,19 +1,29 @@
-use serde::Serialize;
-use tauri::command;
+use crate::KEYMAP;
 use enigo::{Enigo, MouseButton, MouseControllable};
 use enigo::{Key, KeyboardControllable};
-use uuid::Uuid;
 use mac_address::MacAddress;
 use rand::Rng;
-use crate::KEYMAP;
+use serde::Serialize;
+use tauri::command;
+use uuid::Uuid;
 
+extern crate winapi;
+use winapi::um::winuser::{
+    FindWindowW, SetForegroundWindow, SetWindowPos, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE,
+};
+
+use std::ffi::OsString;
+use std::os::windows::ffi::OsStringExt;
+use std::ptr;
+use winapi::shared::minwindef::{DWORD, MAX_PATH};
+use winapi::shared::windef::RECT;
+use winapi::um::winuser::{GetForegroundWindow, GetWindowRect, GetWindowTextW};
 
 #[derive(Serialize)]
 pub struct Account {
     id: String,
     password: String,
 }
-
 
 #[command]
 pub fn generate_account() -> Account {
@@ -26,7 +36,7 @@ pub fn generate_account() -> Account {
     let mac_result = mac_address::get_mac_address();
     let mut password = String::new();
 
-    if let Ok(Some(mac)) = mac_result{
+    if let Ok(Some(mac)) = mac_result {
         println!("MAC address: {:?}", mac.to_string());
     }
     let mut random = rand::thread_rng();
@@ -121,3 +131,68 @@ pub fn key_event(event_type: &str, key: &str) {
     }
 }
 
+#[command]
+pub fn set_window_topmost(window_title: &str) {
+    unsafe {
+        let window_title_wide: Vec<u16> = window_title
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let window_handle = FindWindowW(std::ptr::null_mut(), window_title_wide.as_ptr());
+
+        if window_handle.is_null() {
+            println!("Window not found");
+            return;
+        }
+
+        SetForegroundWindow(window_handle);
+
+        SetWindowPos(
+            window_handle,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE,
+        );
+    }
+}
+
+#[derive(Serialize)]
+pub struct WindowInfo {
+    name: String,
+    width: i32,
+    height: i32,
+}
+
+#[command]
+pub fn get_top_window_info() -> Option<WindowInfo> {
+    unsafe {
+        let mut title: Vec<u16> = Vec::with_capacity(MAX_PATH);
+        let hWnd = GetForegroundWindow();
+        if hWnd.is_null() {
+            return None;
+        }
+        let len = GetWindowTextW(hWnd, title.as_mut_ptr(), MAX_PATH as i32);
+        if len == 0 {
+            return None;
+        }
+        title.set_len(len as usize);
+
+        let mut rect: RECT = std::mem::zeroed();
+        if GetWindowRect(hWnd, &mut rect as *mut RECT) == 0 {
+            return None;
+        }
+        let width = rect.right - rect.left;
+        let height = rect.bottom - rect.top;
+
+        let title_string = OsString::from_wide(&title).to_string_lossy().into_owned();
+
+        Some(WindowInfo {
+            name: title_string,
+            width,
+            height,
+        })
+    }
+}

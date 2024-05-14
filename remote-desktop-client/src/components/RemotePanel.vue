@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onBeforeMount, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
-import { confirm, } from "@tauri-apps/api/dialog";
+import { confirm } from "@tauri-apps/api/dialog";
 import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
 // import TauriWebsocket from 'tauri-plugin-websocket-api';
 // import WebSocket from "tauri-plugin-websocket-api";
@@ -12,7 +12,12 @@ import {
   MessageType,
   InputEventType,
 } from "../common/Constans";
-import { handleKeyboardEvent, handleMouseEvent } from "../common/InputEvent";
+import {
+  handleGetTopWindowInfo,
+  handleKeyboardEvent,
+  handleMouseEvent,
+  handleWindowTop,
+} from "../common/InputEvent";
 // 用于存储响应式数据的对象
 const data = reactive({
   account: {
@@ -44,12 +49,14 @@ onBeforeMount(async () => {
   initWebSocket();
 });
 onMounted(() => {
-  appWindow.onCloseRequested(async (event) => {
-    event.preventDefault();
-    closeRemoteDesktop();
-  }).then((unlistenFn: Function) => {
-    unlisten = unlistenFn;
-  });
+  appWindow
+    .onCloseRequested(async (event) => {
+      event.preventDefault();
+      closeRemoteDesktop();
+    })
+    .then((unlistenFn: Function) => {
+      unlisten = unlistenFn;
+    });
 });
 
 // 在组件卸载时取消监听器
@@ -65,7 +72,7 @@ onUnmounted(() => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://10.134.169.24:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://192.168.1.2:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -181,9 +188,9 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
     }
   };
 
-  webcamStream
-    .getTracks()
-    .forEach((track: MediaStreamTrack) => pc.addTrack(track, webcamStream));
+  webcamStream.getTracks().forEach(async (track: MediaStreamTrack) => {
+    pc.addTrack(track, webcamStream);
+  });
 
   sendOffer();
 };
@@ -290,13 +297,25 @@ const initRTCDataChannel = () => {
   });
 
   //计算分辨率，鼠标属于哪个位置
-  dc.onopen = (e: Event) => {
+  dc.onopen = async (e: Event) => {
     data.isConnecting = true;
     console.log("数据通道已打开");
+    const windInfo: any = await handleGetTopWindowInfo();
+
+    let w;
+    let h;
+    if (windInfo.name.includes("正在共享你的屏幕")) {
+      w = window.screen.width;
+      h = window.screen.height;
+    } else {
+      w = windInfo.width;
+      h = windInfo.height;
+    }
     dc.send(
       JSON.stringify({
-        width: window.screen.width * window.devicePixelRatio,
-        height: window.screen.height * window.devicePixelRatio,
+        name: windInfo.name,
+        width: w * window.devicePixelRatio,
+        height: h * window.devicePixelRatio,
       })
     );
     console.log("数据通道:", dc);
@@ -310,6 +329,9 @@ const initRTCDataChannel = () => {
         break;
       case InputEventType.KEY_EVENT:
         handleKeyboardEvent(msg.data);
+        break;
+      case InputEventType.WINDOW_EVENT:
+        handleWindowTop(msg.data);
         break;
     }
   };
@@ -407,7 +429,7 @@ const close = (msg?: Record<string, any>) => {
   console.log(id);
 
   if (msg) {
-    const stream = webcamStreamArr.find((item) => (item.id == id));
+    const stream = webcamStreamArr.find((item) => item.id == id);
     stream?.getTracks().forEach((track: MediaStreamTrack) => track.stop());
   } else {
     webcamStreamArr.forEach((stream) => {
@@ -438,25 +460,44 @@ const sendToClient = (msg: Record<string, any>) => {
 // });
 
 // you need to call unlisten if your handler goes out of scope e.g. the component is unmounted
-
-
 </script>
 
 <template>
-  <div v-if="data.isConnecting" class="connecting-message sidebarr"
-    style="position: fixed; top: 0; left: 0; right: 0; bottom: 0">
+  <div
+    v-if="data.isConnecting"
+    class="connecting-message sidebarr"
+    style="position: fixed; top: 0; left: 0; right: 0; bottom: 0"
+  >
     正在被远控{{ data.screenChangesignal }}个窗口...
   </div>
-  <button v-if="data.isConnecting" class="close-btn" @click="closeRemoteDesktop()">结束所有被控</button>
+  <button
+    v-if="data.isConnecting"
+    class="close-btn"
+    @click="closeRemoteDesktop()"
+  >
+    结束所有被控
+  </button>
   <div v-if="!data.isConnecting" class="sidebar">
     <div>
-      <p>address: <span>{{ data.account.id }}</span></p>
-      <p>password: <span>{{ data.account.password }}</span></p>
+      <p>
+        address: <span>{{ data.account.id }}</span>
+      </p>
+      <p>
+        password: <span>{{ data.account.password }}</span>
+      </p>
     </div>
   </div>
   <div v-if="!data.isConnecting" class="form">
-    <input v-model="data.receiverAccount.id" type="text" placeholder="请输入对方id" />
-    <input v-model="data.receiverAccount.password" type="text" placeholder="请输入对方密码" />
+    <input
+      v-model="data.receiverAccount.id"
+      type="text"
+      placeholder="请输入对方id"
+    />
+    <input
+      v-model="data.receiverAccount.password"
+      type="text"
+      placeholder="请输入对方密码"
+    />
     <button @click="remoteDesktop()">发起远程</button>
   </div>
 </template>
@@ -474,7 +515,7 @@ const sendToClient = (msg: Record<string, any>) => {
   border-bottom: 1px solid #252525;
   box-sizing: border-box;
 
-  >div {
+  > div {
     background: #242425;
     padding: 10px 20px;
     border-radius: 10px;

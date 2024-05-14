@@ -16,7 +16,7 @@
       "http": {
         "all": true, 
         "request": true ,
-        "scope": ["http://10.134.180.11:8081/*"]
+        "scope": ["http://192.168.1.2:8081/*"]
       }
     },
     "bundle": {
