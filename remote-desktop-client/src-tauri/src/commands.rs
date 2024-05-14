@@ -8,18 +8,17 @@ use tauri::command;
 use uuid::Uuid;
 
 extern crate winapi;
-use std::ptr;
 use winapi::um::winuser::{
-    FindWindowW, GetForegroundWindow, SetForegroundWindow, ShowWindow, SWP_NOMOVE, SWP_NOSIZE,
-    SWP_SHOWWINDOW, SW_RESTORE,
+    FindWindowW, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOMOVE,
+    SWP_NOSIZE, SW_RESTORE,
 };
-use winapi::um::winuser::{IsIconic, SetWindowPos};
 
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
+use std::ptr;
 use winapi::shared::minwindef::{DWORD, MAX_PATH};
 use winapi::shared::windef::RECT;
-use winapi::um::winuser::{GetWindowRect, GetWindowTextW};
+use winapi::um::winuser::{GetForegroundWindow, GetWindowRect, GetWindowTextW};
 
 #[derive(Serialize)]
 pub struct Account {
@@ -138,25 +137,13 @@ pub fn set_window_topmost(window_title: &str) {
     unsafe {
         let hwnd = FindWindowW(
             ptr::null_mut(),
-            window_title.encode_utf16().collect::<Vec<u16>>().as_ptr(),
+            window_title
+                .encode_utf16()
+                .collect::<Vec<u16>>()
+                .as_ptr(),
         );
         if !hwnd.is_null() {
-            if IsIconic(hwnd) != 0 {
-                ShowWindow(hwnd, SW_RESTORE);
-            }
-            SetForegroundWindow(hwnd);
-            let foreground_window = GetForegroundWindow();
-            if hwnd != foreground_window {
-                SetWindowPos(
-                    hwnd,
-                    foreground_window,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
-                );
-            }
+            ShowWindow(hwnd, SW_RESTORE);
         } else {
             println!("Window not found");
         }

@@ -612,7 +612,7 @@ const setWindowTop = (video: any) => {
   sendToClient({
     type: InputEventType.WINDOW_EVENT,
     data: {
-      windowTitle: video.name,
+      windowTitle: video.name + '\0',
     },
   });
 };
