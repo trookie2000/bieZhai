@@ -188,7 +188,7 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
     }
   };
 
-  webcamStream.getTracks().forEach(async (track: MediaStreamTrack) => {
+  webcamStream.getTracks().forEach((track: MediaStreamTrack) => {
     pc.addTrack(track, webcamStream);
   });
 
@@ -311,8 +311,12 @@ const initRTCDataChannel = () => {
       w = windInfo.width;
       h = windInfo.height;
     }
+
+    console.log(webcamStreamArr[webcamStreamArr.length - 1]);
+    
     dc.send(
       JSON.stringify({
+        id: webcamStreamArr[webcamStreamArr.length - 1].id,
         name: windInfo.name,
         width: w * window.devicePixelRatio,
         height: h * window.devicePixelRatio,

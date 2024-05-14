@@ -78,6 +78,7 @@ dependencies = [
  "tauri-plugin-localhost",
  "tauri-plugin-websocket",
  "uuid",
+ "winapi",
 ]
 
 [[package]]

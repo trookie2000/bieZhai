@@ -20,7 +20,11 @@ import {
   MessageType,
   InputEventType,
 } from "../common/Constans";
-import { handleKeyboardEvent, handleMouseEvent, handleWindowTop } from "../common/InputEvent";
+import {
+  handleKeyboardEvent,
+  handleMouseEvent,
+  handleWindowTop,
+} from "../common/InputEvent";
 
 // 用于存储响应式数据的对象
 const data = reactive({
@@ -311,12 +315,20 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
   data.isConnecting = false;
   dc = e.channel;
   dc.onopen = (e: Event) => {
-    console.log(e);
     console.log("数据通道已打开");
   };
 
   dc.onmessage = (event: MessageEvent) => {
-    remoteDesktopDpi = JSON.parse(event.data);
+    const { id, name, width, height } = JSON.parse(event.data);
+
+    const video = videos.find((v: any) => v.stream.id == id);
+    video.name = name;
+    video.streamId = id;
+
+    remoteDesktopDpi = {
+      width,
+      height,
+    };
   };
 
   dc.onclose = (e: Event) => {
@@ -596,14 +608,12 @@ const toggleFullScreen = (videoElement: any, vide: any, index: any) => {
 //     },
 // 添加变量用于跟踪视频是否在全屏模式下
 const isVideoFullscreen = ref(false);
-const setWindowTop = (index: any) => {
-  console.log("窗口被置于顶层");
-  videos.forEach((v: any, i: any) => {
-    if (i === index) {
-      v.isTop = true;
-    } else {
-      v.isTop = false;
-    }
+const setWindowTop = (video: any) => {
+  sendToClient({
+    type: InputEventType.WINDOW_EVENT,
+    data: {
+      name: video.name,
+    },
   });
 };
 
@@ -653,7 +663,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
         "
             @dblclick="(e) => {
         toggleFullScreen(($refs.videoElements as any[])[index], video, index);
-        setWindowTop(index);
+        setWindowTop(video);
       }
         "
             x5-video-player-type="h5-page"
