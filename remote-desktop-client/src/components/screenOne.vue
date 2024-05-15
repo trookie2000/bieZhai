@@ -323,6 +323,9 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
       event.data
     );
 
+    console.log(event.data);
+    
+
     const video = videos.find((v: any) => v.stream.id == id);
     video.name = name;
     video.streamId = id;

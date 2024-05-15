@@ -313,13 +313,17 @@ const initRTCDataChannel = () => {
     }
 
     console.log(webcamStreamArr[webcamStreamArr.length - 1]);
-    
+
     dc.send(
       JSON.stringify({
         id: webcamStreamArr[webcamStreamArr.length - 1].id,
         name: windInfo.name,
         width: w * window.devicePixelRatio,
         height: h * window.devicePixelRatio,
+        left: windInfo.left,
+        right: windInfo.right,
+        top: windInfo.top,
+        bottom: windInfo.bottom,
       })
     );
     console.log("数据通道:", dc);
