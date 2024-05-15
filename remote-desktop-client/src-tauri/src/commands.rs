@@ -9,8 +9,8 @@ use uuid::Uuid;
 
 extern crate winapi;
 use winapi::um::winuser::{
-    FindWindowW, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOMOVE,
-    SWP_NOSIZE, SW_RESTORE,
+    FindWindowW, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOP, HWND_TOPMOST, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
 };
 
 use std::ffi::OsString;
@@ -137,13 +137,13 @@ pub fn set_window_topmost(window_title: &str) {
     unsafe {
         let hwnd = FindWindowW(
             ptr::null_mut(),
-            window_title
-                .encode_utf16()
-                .collect::<Vec<u16>>()
-                .as_ptr(),
+            window_title.encode_utf16().collect::<Vec<u16>>().as_ptr(),
         );
         if !hwnd.is_null() {
+            println!("Show window");
             ShowWindow(hwnd, SW_RESTORE);
+            SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            SetForegroundWindow(hwnd);
         } else {
             println!("Window not found");
         }
@@ -155,6 +155,10 @@ pub struct WindowInfo {
     name: String,
     width: i32,
     height: i32,
+    left: i32,
+    right: i32,
+    top: i32,
+    bottom: i32,
 }
 
 #[command]
@@ -177,6 +181,10 @@ pub fn get_top_window_info() -> Option<WindowInfo> {
         }
         let width = rect.right - rect.left;
         let height = rect.bottom - rect.top;
+        let left = rect.left;
+        let right = rect.right;
+        let top = rect.top;
+        let bottom = rect.bottom;
 
         let title_string = OsString::from_wide(&title).to_string_lossy().into_owned();
 
@@ -184,6 +192,10 @@ pub fn get_top_window_info() -> Option<WindowInfo> {
             name: title_string,
             width,
             height,
+            left,
+            right,
+            top,
+            bottom,
         })
     }
 }

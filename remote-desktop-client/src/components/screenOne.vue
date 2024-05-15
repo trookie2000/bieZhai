@@ -319,7 +319,9 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
   };
 
   dc.onmessage = (event: MessageEvent) => {
-    const { id, name, width, height } = JSON.parse(event.data);
+    const { id, name, width, height, left, right, top, bottom } = JSON.parse(
+      event.data
+    );
 
     const video = videos.find((v: any) => v.stream.id == id);
     video.name = name;
@@ -328,6 +330,10 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
     remoteDesktopDpi = {
       width,
       height,
+      left,
+      right,
+      top,
+      bottom,
     };
   };
 
@@ -458,11 +464,16 @@ const sendMouseEvent = (
   const desktopWidth = remoteDesktopDpi.width;
   const desktopHeight = remoteDesktopDpi.height;
 
+  console.log(remoteDesktopDpi);
+
   // 计算鼠标相对于视频元素的位置
   const xRatio = desktopWidth / videoElement.offsetWidth;
   const yRatio = desktopHeight / videoElement.offsetHeight;
-  const x = Math.round(e.offsetX * xRatio);
-  const y = Math.round(e.offsetY * yRatio);
+  const x = Math.round(e.offsetX * xRatio) + remoteDesktopDpi.left;
+  const y = Math.round(e.offsetY * yRatio) + remoteDesktopDpi.top;
+
+  console.log(x);
+  console.log(y);
 
   // 计算鼠标移动的速度
   const now = performance.now();
@@ -612,7 +623,7 @@ const setWindowTop = (video: any) => {
   sendToClient({
     type: InputEventType.WINDOW_EVENT,
     data: {
-      windowTitle: video.name + '\0',
+      windowTitle: video.name + "\0",
     },
   });
 };
