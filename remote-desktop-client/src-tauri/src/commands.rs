@@ -10,7 +10,7 @@ use uuid::Uuid;
 extern crate winapi;
 use winapi::um::winuser::{
     FindWindowW, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOP, HWND_TOPMOST, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+    SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,FindWindowExA
 };
 
 use std::ffi::OsString;
@@ -132,9 +132,11 @@ pub fn key_event(event_type: &str, key: &str) {
     }
 }
 
+//将一个指定窗口置于最前面
 #[command]
 pub fn set_window_topmost(window_title: &str) {
     unsafe {
+        //获取窗口句柄
         let hwnd = FindWindowW(
             ptr::null_mut(),
             window_title.encode_utf16().collect::<Vec<u16>>().as_ptr(),
@@ -161,6 +163,7 @@ pub struct WindowInfo {
     bottom: i32,
 }
 
+//获取当前处于最前面的窗口的信息
 #[command]
 pub fn get_top_window_info() -> Option<WindowInfo> {
     unsafe {

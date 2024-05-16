@@ -101,7 +101,7 @@ const closeRemoteDesktop = async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://192.168.1.2:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://10.134.180.77:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -140,6 +140,7 @@ const initWebSocket = () => {
   ws.onerror = (e: Event) => {
     console.log("WebSocket 连接错误:", e);
   };
+
 };
 //当共享方关闭漂浮栏中的按钮后通知远控方video关闭
 function closeVideoByMacAddress(msg: Record<string, any>) {
@@ -324,12 +325,17 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
     );
 
     console.log(event.data);
-    
 
+    //窗体位置发生变化的应对
     const video = videos.find((v: any) => v.stream.id == id);
     video.name = name;
     video.streamId = id;
-
+    video.width = width;
+    video.height = height;
+    video.left = left;
+    video.right = right;
+    video.top = top;
+    video.bottom = bottom;
     remoteDesktopDpi = {
       width,
       height,
@@ -621,8 +627,18 @@ const toggleFullScreen = (videoElement: any, vide: any, index: any) => {
 //       }
 //     },
 // 添加变量用于跟踪视频是否在全屏模式下
-const isVideoFullscreen = ref(false);
+const isVideoFullscreen = ref(true);
 const setWindowTop = (video: any) => {
+
+  //窗体位置发生变化的应对
+  remoteDesktopDpi = {
+    width: video.width,
+    height: video.height,
+    left: video.left,
+    right: video.right,
+    top: video.top,
+    bottom: video.bottom,
+  };
   sendToClient({
     type: InputEventType.WINDOW_EVENT,
     data: {
@@ -656,40 +672,21 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 <template>
   <div class="container">
     <div class="video-grid">
-      <div
-        v-for="(video, index) in videos"
-        :key="video.id"
-        class="video-wrapper"
-        :class="{ isTop: video.isTop }"
-        @click="setActiveVideo(index)"
-      >
+      <div v-for="(video, index) in videos" :key="video.id" class="video-wrapper" :class="{ isTop: video.isTop }"
+        @click="setActiveVideo(index)">
         <div class="video-container">
-          <video
-            v-show="data.isShowRemoteDesktop"
-            class="video"
-            ref="videoElements"
-            :srcObject="video.stream"
+          <video v-show="data.isShowRemoteDesktop" class="video" ref="videoElements" :srcObject="video.stream"
             @mousedown="(e) => mouseDown(e, ($refs.videoElements as any[])[index])"
             @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
             @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
-            @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])"
-            @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
-        "
-            @dblclick="(e) => {
+            @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])" @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
+        " @dblclick="(e) => {
         toggleFullScreen(($refs.videoElements as any[])[index], video, index);
         setWindowTop(video);
       }
-        "
-            x5-video-player-type="h5-page"
-            autoplay
-            controls
-          ></video>
+        " x5-video-player-type="h5-page" autoplay controls></video>
 
-          <button
-            v-if="data.isShowRemoteDesktop"
-            class="close-btn"
-            @click="closeVideo(video)"
-          >
+          <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeVideo(video)">
             关闭
           </button>
         </div>
@@ -716,6 +713,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 video::-webkit-media-controls-enclosure {
   display: none !important;
 }
+
 .videoElements {
   width: 100%;
   height: 100%;

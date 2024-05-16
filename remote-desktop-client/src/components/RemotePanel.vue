@@ -72,7 +72,7 @@ onUnmounted(() => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://192.168.1.2:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://10.134.180.77:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
