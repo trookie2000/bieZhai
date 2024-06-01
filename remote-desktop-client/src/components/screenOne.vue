@@ -1,3 +1,4 @@
+这是我的代码
 <script setup lang="ts">
 import {
   ref,
@@ -101,7 +102,7 @@ const closeRemoteDesktop = async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://10.134.180.77:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://192.168.1.102:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -433,8 +434,14 @@ const closeVideo = (video: any) => {
     });
 
     videos.splice(index, 1);
+
+    // 如果关闭的是当前显示的视频，重置activeVideoIndex
+    if (activeVideoIndex.value === index) {
+      activeVideoIndex.value = null;
+    }
   }
 };
+
 
 // 鼠标事件处理改动，传递事件对象和视频元素
 const mouseDown = (e: any, videoElement: any) => {
@@ -575,8 +582,12 @@ videos.forEach((video: any) => {
   video.removeEventListener("keydown", video.__keydownHandler);
 });
 
-let activeVideoIndex = ref(null);
-const setActiveVideo = (index: any) => {
+let activeVideoIndex = ref<number | null>(null);
+const setActiveVideo = (index: number) => {
+  activeVideoIndex.value = index;
+};
+
+const showVideo = (index: number) => {
   activeVideoIndex.value = index;
 };
 
@@ -588,6 +599,7 @@ const addVideo = (stream: any) => {
   };
   videos.push(videoObj);
 };
+
 const toggleFullScreen = (videoElement: any, vide: any, index: any) => {
   if (!document.fullscreenElement) {
     videoElement
@@ -671,40 +683,53 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 </script>
 <template>
   <div class="container">
+    <!-- 新增列表部分 -->
+    <div class="video-list">
+      <ul>
+        <li v-for="(video, index) in videos" :key="video.id">
+          <span @click="showVideo(index)">{{ video.name }}</span>
+          <button @click="closeVideo(video)">关闭</button>
+        </li>
+      </ul>
+    </div>
     <div class="video-grid">
       <div v-for="(video, index) in videos" :key="video.id" class="video-wrapper" :class="{ isTop: video.isTop }"
-        @click="setActiveVideo(index)">
-        <div class="video-container">
-          <video v-show="data.isShowRemoteDesktop" class="video" ref="videoElements" :srcObject="video.stream"
-            @mousedown="(e) => mouseDown(e, ($refs.videoElements as any[])[index])"
-            @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
-            @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
-            @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])" @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
-        " @dblclick="(e) => {
-        toggleFullScreen(($refs.videoElements as any[])[index], video, index);
-        setWindowTop(video);
-      }
-        " x5-video-player-type="h5-page" autoplay controls></video>
-
-          <button v-if="data.isShowRemoteDesktop" class="close-btn" @click="closeVideo(video)">
-            关闭
-          </button>
+          v-show="activeVideoIndex === index">
+          <div class="video-container">
+            <video class="video" ref="videoElements" :srcObject="video.stream"
+              @mousedown="(e) => mouseDown(e, ($refs.videoElements as any[])[index])"
+              @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
+              @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
+              @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])" @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
+          " @dblclick="(e) => {
+          toggleFullScreen(($refs.videoElements as any[])[index], video, index);
+          setWindowTop(video);
+        }
+          " x5-video-player-type="h5-page" autoplay controls></video>
         </div>
       </div>
     </div>
   </div>
 </template>
 
+
+
+
 <style lang="less" scoped>
+
 .container {
   display: flex;
+  height: 100vh;
 }
 
 .video-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  grid-gap: 10px;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  background-color: transparent;
 }
+
 
 .video-wrapper.isTop {
   z-index: 9999;
@@ -730,15 +755,20 @@ video::-webkit-media-controls-enclosure {
 }
 
 .video-wrapper {
-  position: relative;
   width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
 }
-
 video {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: contain; /* 保持视频的宽高比 */
 }
+
 
 .close-btn {
   position: absolute;
@@ -753,5 +783,25 @@ video {
   bottom: 20px;
   right: 20px;
   transform: translate(50%, 50%);
+}
+.video-list {
+  width: 200px;
+  background-color: #f1f1f1;
+  overflow-y: auto;
+}
+
+.video-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.video-list li {
+  padding: 10px;
+  cursor: pointer;
+}
+
+.video-list li:hover {
+  background-color: #ddd;
 }
 </style>

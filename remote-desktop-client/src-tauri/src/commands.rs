@@ -8,11 +8,13 @@ use tauri::command;
 use uuid::Uuid;
 
 extern crate winapi;
+use winapi::shared::windef::HWND;
+
 use winapi::um::winuser::{
     FindWindowW, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOP, HWND_TOPMOST, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,FindWindowExA
+    SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,FindWindowExA,FindWindowExW
 };
-
+use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 use std::ptr;
@@ -25,7 +27,23 @@ pub struct Account {
     id: String,
     password: String,
 }
+fn find_windows_by_title(window_title: &str) -> Vec<HWND> {
+    let mut hwnds = Vec::new();
+    let mut hwnd = ptr::null_mut();
+    let window_title_wide: Vec<u16> = OsString::from(window_title).encode_wide().collect();
 
+    loop {
+        hwnd = unsafe { 
+            FindWindowExW(ptr::null_mut(), hwnd, ptr::null(), window_title_wide.as_ptr())
+        };
+        if hwnd.is_null() {
+            break;
+        }
+        hwnds.push(hwnd);
+    }
+
+    hwnds
+}
 #[command]
 pub fn generate_account() -> Account {
     let mac_result = mac_address::get_mac_address();
@@ -135,22 +153,22 @@ pub fn key_event(event_type: &str, key: &str) {
 //将一个指定窗口置于最前面
 #[command]
 pub fn set_window_topmost(window_title: &str) {
-    unsafe {
-        //获取窗口句柄
-        let hwnd = FindWindowW(
-            ptr::null_mut(),
-            window_title.encode_utf16().collect::<Vec<u16>>().as_ptr(),
-        );
-        if !hwnd.is_null() {
-            println!("Show window");
+    let hwnds = find_windows_by_title(window_title);
+    let hwnds_clone = hwnds.clone(); // 克隆一份副本
+    for hwnd in hwnds_clone {
+        unsafe {
             ShowWindow(hwnd, SW_RESTORE);
             SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             SetForegroundWindow(hwnd);
-        } else {
-            println!("Window not found");
         }
     }
+    if hwnds.is_empty() {
+        println!("Window not found");
+    } else {
+        println!("Show window");
+    }
 }
+
 
 #[derive(Serialize)]
 pub struct WindowInfo {
