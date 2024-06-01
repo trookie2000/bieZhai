@@ -687,30 +687,32 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
     <div class="video-list">
       <ul>
         <li v-for="(video, index) in videos" :key="video.id">
-          <span @click="showVideo(index)">{{ video.name }}</span>
-          <button @click="closeVideo(video)">关闭</button>
+          <span @click="showVideo(index)" class="video-name">{{ video.name }}</span>
+          <span @click="closeVideo(video)" class="close-btn">&times;</span>
         </li>
       </ul>
     </div>
+
     <div class="video-grid">
       <div v-for="(video, index) in videos" :key="video.id" class="video-wrapper" :class="{ isTop: video.isTop }"
-          v-show="activeVideoIndex === index">
-          <div class="video-container">
-            <video class="video" ref="videoElements" :srcObject="video.stream"
-              @mousedown="(e) => mouseDown(e, ($refs.videoElements as any[])[index])"
-              @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
-              @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
-              @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])" @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
-          " @dblclick="(e) => {
-          toggleFullScreen(($refs.videoElements as any[])[index], video, index);
-          setWindowTop(video);
-        }
-          " x5-video-player-type="h5-page" autoplay controls></video>
+        v-show="activeVideoIndex === index">
+        <div class="video-container">
+          <video class="video" ref="videoElements" :srcObject="video.stream"
+            @mousedown="(e) => mouseDown(e, ($refs.videoElements as any[])[index])"
+            @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
+            @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
+            @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])" @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
+        " @dblclick="(e) => {
+        toggleFullScreen(($refs.videoElements as any[])[index], video, index);
+        setWindowTop(video);
+      }
+        " x5-video-player-type="h5-page" autoplay controls></video>
         </div>
       </div>
     </div>
   </div>
 </template>
+
 
 
 
@@ -738,7 +740,10 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 video::-webkit-media-controls-enclosure {
   display: none !important;
 }
-
+.video-name {
+  flex-grow: 1;
+  padding-right: 10px;
+}
 .videoElements {
   width: 100%;
   height: 100%;
@@ -748,10 +753,22 @@ video::-webkit-media-controls-enclosure {
   background: #121212;
   cursor: none;
 }
+.close-btn {
+  color: #d71526;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.close-btn:hover {
+  color: #ff5a5a;
+}
 
 .video-container {
   position: relative;
   width: 100%;
+  cursor: none;
 }
 
 .video-wrapper {
@@ -769,24 +786,10 @@ video {
   object-fit: contain; /* 保持视频的宽高比 */
 }
 
-
-.close-btn {
-  position: absolute;
-  z-index: 999;
-  background: #d71526;
-  font-size: 12px;
-  bottom: 5%;
-  right: 5%;
-}
-
-.close-btn.fullscreen {
-  bottom: 20px;
-  right: 20px;
-  transform: translate(50%, 50%);
-}
 .video-list {
   width: 200px;
-  background-color: #f1f1f1;
+  background-color: #f9f9f9;
+  border-right: 1px solid #ddd;
   overflow-y: auto;
 }
 
@@ -797,11 +800,16 @@ video {
 }
 
 .video-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: 10px;
   cursor: pointer;
+  border-bottom: 1px solid #ddd;
+  transition: background-color 0.3s, color 0.3s;
 }
 
 .video-list li:hover {
-  background-color: #ddd;
+  background-color: #f1f1f1;
 }
 </style>
