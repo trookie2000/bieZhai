@@ -717,6 +717,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 
 
 
+
 <style lang="less" scoped>
 
 .container {
@@ -725,12 +726,14 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 }
 
 .video-grid {
-  display: flex;
   flex: 1;
-  justify-content: center;
-  align-items: center;
-  background-color: transparent;
+  display: grid;
+  grid-template-columns: 1fr; /* 每行一个视频 */
+  grid-template-rows: 1fr; /* 每列一个视频 */
+  grid-gap: 10px;
+  background-color: #1c1c1c; /* 背景颜色 */
 }
+
 
 
 .video-wrapper.isTop {
@@ -754,11 +757,15 @@ video::-webkit-media-controls-enclosure {
   cursor: none;
 }
 .close-btn {
-  color: #d71526;
-  font-size: 16px;
+  color: #e74c3c; /* 关闭按钮颜色 */
+  font-size: 18px;
   font-weight: bold;
   cursor: pointer;
   transition: color 0.3s;
+}
+
+.close-btn:hover {
+  color: #c0392b;
 }
 
 .close-btn:hover {
@@ -766,31 +773,36 @@ video::-webkit-media-controls-enclosure {
 }
 
 .video-container {
-  position: relative;
   width: 100%;
-  cursor: none;
+  height: 100%;
+  cursor: none; /* 隐藏鼠标光标 */
 }
 
 .video-wrapper {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  position: relative;
+  background-color: #1c1c1c; /* 视频容器背景颜色 */
+  border-radius: 10px; /* 圆角边框 */
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); /* 添加阴影 */
 }
 video {
-  display: block;
+  position: relative;
   width: 100%;
   height: 100%;
-  object-fit: contain; /* 保持视频的宽高比 */
+  border-radius: 10px; /* 圆角边框 */
 }
 
 .video-list {
-  width: 200px;
-  background-color: #f9f9f9;
-  border-right: 1px solid #ddd;
+  width: 220px; /* 调整列表宽度 */
+  background-color: #2c3e50; /* 深色背景 */
+  border-right: 2px solid #34495e; /* 边框颜色 */
   overflow-y: auto;
+  color: #ecf0f1; /* 字体颜色 */
 }
 
 .video-list ul {
@@ -803,13 +815,13 @@ video {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px;
+  padding: 12px 15px; /* 调整内边距 */
   cursor: pointer;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid #34495e; /* 边框颜色 */
   transition: background-color 0.3s, color 0.3s;
 }
 
 .video-list li:hover {
-  background-color: #f1f1f1;
+  background-color: #34495e;
 }
 </style>
