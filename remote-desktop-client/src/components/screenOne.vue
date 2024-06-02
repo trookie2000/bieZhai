@@ -1,4 +1,3 @@
-这是我的代码
 <script setup lang="ts">
 import {
   ref,
@@ -9,6 +8,7 @@ import {
   watch,
   onBeforeUnmount,
   onUnmounted,
+  computed,
 } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
 import { confirm } from "@tauri-apps/api/dialog";
@@ -69,6 +69,16 @@ onMounted(() => {
       unlisten = unlistenFn;
     });
 });
+interface Video {
+  id: string;
+  stream: any;
+  receiverAccount: {
+    id: string;
+    password: string;
+  };
+  name: string;
+}
+
 onBeforeUnmount(() => {
   document.removeEventListener("fullscreenchange", handleFullscreenChange);
 });
@@ -77,6 +87,24 @@ onUnmounted(() => {
     unlisten();
   }
 });
+const activeDeviceId = ref<string | null>(null);
+
+const groupedVideos = computed((): Record<string, Video[]> => {
+  const groups: Record<string, Video[]> = {};
+  videos.forEach((video: Video) => {
+    const deviceId = video.receiverAccount.id;
+    if (!groups[deviceId]) {
+      groups[deviceId] = [];
+    }
+    groups[deviceId].push(video);
+  });
+  return groups;
+});
+
+
+const toggleDevice = (deviceId: string) => {
+  activeDeviceId.value = activeDeviceId.value === deviceId ? null : deviceId;
+};
 // 关闭远程桌面
 const closeRemoteDesktop = async () => {
   const confirmed = await confirm("确认？", "提示");
@@ -642,18 +670,21 @@ const setActiveVideo = (index: number) => {
   activeVideoIndex.value = index;
 };
 
-const showVideo = (index: number) => {
-  activeVideoIndex.value = index;
+const showVideo = (video: Video) => {
+  activeVideoIndex.value = videos.findIndex(v => v.id === video.id);
 };
+
 
 const addVideo = (stream: any) => {
   const videoObj = {
-    id: Date.now().toString(), // 使用时间戳生成唯一ID
+    id: Date.now().toString(),
     stream,
+    receiverAccount: { id: data.receiverAccount.id }, // 确保包含 receiverAccount.id
     name: `Video ${videos.length + 1}`,
   };
   videos.push(videoObj);
 };
+
 // DONE 修复后的版本，之前此函数用于英语
 // const toggleFullScreen = (videoElement: any, vide: any, index: any) => {
 //   if (!document.fullscreenElement) {
@@ -741,9 +772,14 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
     <!-- 新增列表部分 -->
     <div class="video-list">
       <ul>
-        <li v-for="(video, index) in videos" :key="video.id">
-          <span @click="() => { showVideo(index); setWindowTop(video); }" class="video-name">{{ video.name }}</span>
-          <span @click="closeVideo(video)" class="close-btn">&times;</span>
+        <li v-for="(videos, deviceId) in groupedVideos" :key="deviceId" class="device-item">
+          <div @click="toggleDevice(deviceId)" class="device-name">{{ deviceId }}</div>
+          <ul v-show="activeDeviceId === deviceId" class="sub-list">
+            <li v-for="video in videos" :key="video.id" class="video-item">
+              <span @click="() => { showVideo(video); setWindowTop(video); }" class="video-name">{{ video.name }}</span>
+              <span @click="closeVideo(video)" class="close-btn">&times;</span>
+            </li>
+          </ul>
         </li>
       </ul>
     </div>
@@ -765,12 +801,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 </template>
 
 
-
-
-
-
 <style lang="less" scoped>
-
 .container {
   display: flex;
   height: 100vh;
@@ -785,8 +816,6 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
   background-color: #1c1c1c; /* 背景颜色 */
 }
 
-
-
 .video-wrapper.isTop {
   z-index: 9999;
 }
@@ -794,10 +823,12 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 video::-webkit-media-controls-enclosure {
   display: none !important;
 }
+
 .video-name {
   flex-grow: 1;
   padding-right: 10px;
 }
+
 .videoElements {
   width: 100%;
   height: 100%;
@@ -807,6 +838,7 @@ video::-webkit-media-controls-enclosure {
   background: #121212;
   cursor: none;
 }
+
 .close-btn {
   color: #e74c3c; /* 关闭按钮颜色 */
   font-size: 18px;
@@ -841,6 +873,7 @@ video::-webkit-media-controls-enclosure {
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); /* 添加阴影 */
 }
+
 video {
   position: relative;
   width: 100%;
@@ -864,8 +897,9 @@ video {
 
 .video-list li {
   display: flex;
+  flex-direction: column; /* 垂直排列子列表 */
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   padding: 12px 15px; /* 调整内边距 */
   cursor: pointer;
   border-bottom: 1px solid #34495e; /* 边框颜色 */
@@ -874,5 +908,38 @@ video {
 
 .video-list li:hover {
   background-color: #34495e;
+}
+
+.device-item {
+  margin-bottom: 10px; /* 调整父项间距 */
+}
+
+.device-name {
+  display: block;
+  padding: 12px 15px; /* 调整内边距 */
+  cursor: pointer;
+  background-color: #34495e; /* 背景颜色 */
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.device-name:hover {
+  background-color: #3a566e;
+}
+
+.sub-list {
+  padding-left: 15px; /* 子列表缩进 */
+  border-left: 2px solid #34495e; /* 子列表边框颜色 */
+  margin-top: 5px; /* 调整子列表上间距 */
+}
+
+.video-item {
+  padding: 8px 15px; /* 调整内边距 */
+  cursor: pointer;
+  border-bottom: 1px solid #34495e; /* 边框颜色 */
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.video-item:hover {
+  background-color: #3a566e;
 }
 </style>
