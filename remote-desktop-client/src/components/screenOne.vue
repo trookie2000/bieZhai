@@ -687,8 +687,7 @@ const addVideo = (stream: any) => {
 
 const isVideoFullscreen = ref(true);
 const setWindowTop = (video: any) => {
-
-  //窗体位置发生变化的应对
+  // 只更新需要的属性，不修改video.name
   remoteDesktopDpi = {
     width: video.width,
     height: video.height,
@@ -704,6 +703,7 @@ const setWindowTop = (video: any) => {
     },
   });
 };
+
 
 // 监听视频全屏状态变化
 document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -733,11 +733,20 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
     <div class="video-list">
       <ul>
         <li v-for="(videos, deviceId) in groupedVideos" :key="deviceId" class="device-item">
-          <div @click="toggleDevice(deviceId)" class="device-name">{{ deviceId }}</div>
+          <div @click="toggleDevice(deviceId)" class="device-name">
+            <i class="icon fas fa-desktop"></i>{{ deviceId }}
+          </div>
           <ul v-show="activeDeviceId === deviceId" class="sub-list">
             <li v-for="video in videos" :key="video.id" class="video-item">
-              <span @click="() => { showVideo(video); setWindowTop(video); }" class="video-name">{{ video.name }}</span>
-              <span @click="closeVideo(video)" class="close-btn">&times;</span>
+              <div class="video-item-content">
+                <span @click="() => { showVideo(video); setWindowTop(video); }" class="video-name">
+                  <i class="icon fas fa-video"></i>{{ video.name }}
+                </span>
+                <span @click="closeVideo(video)" class="close-btn">
+                  <i class="icon fas fa-times"></i>
+                </span>
+              </div>
+              
             </li>
           </ul>
         </li>
@@ -761,18 +770,25 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
 </template>
 
 <style lang="less" scoped>
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css');
+
 .container {
   display: flex;
   height: 100vh;
 }
-
+.video-item-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
 .video-grid {
   flex: 1;
   display: grid;
   grid-template-columns: 1fr; /* 每行一个视频 */
   grid-template-rows: 1fr; /* 每列一个视频 */
   grid-gap: 10px;
-  background-color: #1c1c1c; /* 背景颜色 */
+  background-color: #f0f4f7; /* 背景颜色 */
 }
 
 .video-wrapper.isTop {
@@ -786,7 +802,7 @@ video::-webkit-media-controls-enclosure {
 .video-name {
   flex-grow: 1;
   padding-right: 10px;
-  color: #ecf0f1;
+  color: #2c3e50;
   font-weight: bold;
 }
 
@@ -801,7 +817,7 @@ video::-webkit-media-controls-enclosure {
 }
 
 .close-btn {
-  color: #e74c3c; /* 关闭按钮颜色 */
+  color: #000000; /* 关闭按钮颜色 */
   font-size: 20px;
   font-weight: bold;
   cursor: pointer;
@@ -829,7 +845,7 @@ video::-webkit-media-controls-enclosure {
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #1c1c1c; /* 视频容器背景颜色 */
+  background-color: #f0f4f7; /* 视频容器背景颜色 */
   border-radius: 10px; /* 圆角边框 */
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); /* 添加阴影 */
@@ -844,10 +860,11 @@ video {
 
 .video-list {
   width: 220px; /* 调整列表宽度 */
-  background-color: #2c3e50; /* 深色背景 */
-  border-right: 2px solid #34495e; /* 边框颜色 */
+  background-color: #3498db; /* 更亮的蓝色背景 */
+  border-right: 2px solid #2980b9; /* 边框颜色 */
   overflow-y: auto;
   color: #ecf0f1; /* 字体颜色 */
+  padding: 15px 0;
 }
 
 .video-list ul {
@@ -863,12 +880,12 @@ video {
   align-items: flex-start;
   padding: 12px 15px; /* 调整内边距 */
   cursor: pointer;
-  border-bottom: 1px solid #34495e; /* 边框颜色 */
+  border-bottom: 1px solid #2980b9; /* 边框颜色 */
   transition: background-color 0.3s, color 0.3s;
 }
 
 .video-list li:hover {
-  background-color: #34495e;
+  background-color: #2980b9;
 }
 
 .device-item {
@@ -876,35 +893,42 @@ video {
 }
 
 .device-name {
-  display: block;
+  display: flex;
+  align-items: center;
   padding: 12px 15px; /* 调整内边距 */
   cursor: pointer;
-  background-color: #34495e; /* 背景颜色 */
+  background-color: #3498db; /* 背景颜色 */
   color: #ecf0f1; /* 字体颜色 */
   font-weight: bold;
   transition: background-color 0.3s, color 0.3s;
 }
 
 .device-name:hover {
-  background-color: #3a566e;
+  background-color: #2980b9;
 }
 
 .sub-list {
   padding-left: 15px; /* 子列表缩进 */
-  border-left: 2px solid #34495e; /* 子列表边框颜色 */
+  border-left: 2px solid #2980b9; /* 子列表边框颜色 */
   margin-top: 5px; /* 调整子列表上间距 */
 }
 
 .video-item {
+  display: flex;
+  align-items: center;
   padding: 8px 15px; /* 调整内边距 */
   cursor: pointer;
-  border-bottom: 1px solid #34495e; /* 边框颜色 */
+  border-bottom: 1px solid #2980b9; /* 边框颜色 */
   transition: background-color 0.3s, color 0.3s;
-  color: #bdc3c7; /* 子列表字体颜色 */
+  color: #ecf0f1; /* 子列表字体颜色 */
 }
 
 .video-item:hover {
-  background-color: #3a566e;
+  background-color: #2980b9;
   color: #ecf0f1; /* 鼠标悬停时子列表字体颜色 */
+}
+
+.icon {
+  margin-right: 10px;
 }
 </style>
