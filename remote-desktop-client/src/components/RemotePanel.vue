@@ -507,7 +507,7 @@ const sendToClient = (msg: Record<string, any>) => {
   <div v-if="!data.isConnecting" class="sidebar">
     <div>
       <p>
-        address: <span>{{ data.account.id }}</span>
+        ip: <span>{{ data.account.id }}</span>
       </p>
       <p>
         password: <span>{{ data.account.password }}</span>

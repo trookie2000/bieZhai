@@ -6,6 +6,7 @@ use rand::Rng;
 use serde::Serialize;
 use tauri::command;
 use uuid::Uuid;
+use std::net::UdpSocket;
 
 extern crate winapi;
 use winapi::shared::windef::HWND;
@@ -46,28 +47,26 @@ fn find_windows_by_title(window_title: &str) -> Vec<HWND> {
 }
 #[command]
 pub fn generate_account() -> Account {
-    let mac_result = mac_address::get_mac_address();
-    let id = if let Ok(Some(mac)) = mac_result {
-        mac.to_string()
-    } else {
-        String::from("Unknown")
-    };
-    let mac_result = mac_address::get_mac_address();
+    // 生成随机密码
     let mut password = String::new();
-
-    if let Ok(Some(mac)) = mac_result {
-        println!("MAC address: {:?}", mac.to_string());
-    }
     let mut random = rand::thread_rng();
-    let mut i = 0;
-    while i < 2 {
+    for _ in 0..2 {
         let num = random.gen_range(0..10);
         password.push_str(&num.to_string());
-        i += 1;
     }
+
+    // 获取本机 IP 地址
+    let id = get_local_ip_address().unwrap_or_else(|_| String::from("Unknown"));
 
     // 创建并返回 Account 结构体
     Account { id, password }
+}
+
+fn get_local_ip_address() -> Result<String, std::io::Error> {
+    let socket = UdpSocket::bind("0.0.0.0:0")?;
+    socket.connect("8.8.8.8:80")?; // Google 的公共 DNS 服务器
+    let local_addr = socket.local_addr()?;
+    Ok(local_addr.ip().to_string())
 }
 
 // 鼠标事件命令函数
