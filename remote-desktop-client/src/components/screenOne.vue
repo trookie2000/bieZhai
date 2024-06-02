@@ -102,7 +102,7 @@ const closeRemoteDesktop = async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://192.168.1.102:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://192.168.1.101:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -599,39 +599,39 @@ const addVideo = (stream: any) => {
   };
   videos.push(videoObj);
 };
-
-const toggleFullScreen = (videoElement: any, vide: any, index: any) => {
-  if (!document.fullscreenElement) {
-    videoElement
-      .requestFullscreen()
-      .then(() => {
-        videos[index].isFullscreen = true;
-        handleFullscreenChange();
-        setTimeout(() => {
-          videoElement.controls = false; // 延迟隐藏控制栏
-        }, 10); // 1秒后隐藏控制栏
-        console.log("控制栏隐藏");
-      })
-      .catch((err: any) => {
-        console.error(
-          `Error attempting to enable full-screen mode: ${err.message} (${err.name})`
-        );
-      });
-  } else {
-    document
-      .exitFullscreen()
-      .then(() => {
-        videos.forEach((v: any) => (v.isFullscreen = false));
-        handleFullscreenChange();
-        videoElement.controls = true; // 退出全屏后显示控制栏
-      })
-      .catch((err) => {
-        console.error(
-          `Error attempting to disable full-screen mode: ${err.message} (${err.name})`
-        );
-      });
-  }
-};
+// DONE 修复后的版本，之前此函数用于英语
+// const toggleFullScreen = (videoElement: any, vide: any, index: any) => {
+//   if (!document.fullscreenElement) {
+//     videoElement
+//       .requestFullscreen()
+//       .then(() => {
+//         videos[index].isFullscreen = true;
+//         handleFullscreenChange();
+//         setTimeout(() => {
+//           videoElement.controls = false; // 延迟隐藏控制栏
+//         }, 10); // 1秒后隐藏控制栏
+//         console.log("控制栏隐藏");
+//       })
+//       .catch((err: any) => {
+//         console.error(
+//           `Error attempting to enable full-screen mode: ${err.message} (${err.name})`
+//         );
+//       });
+//   } else {
+//     document
+//       .exitFullscreen()
+//       .then(() => {
+//         videos.forEach((v: any) => (v.isFullscreen = false));
+//         handleFullscreenChange();
+//         videoElement.controls = true; // 退出全屏后显示控制栏
+//       })
+//       .catch((err) => {
+//         console.error(
+//           `Error attempting to disable full-screen mode: ${err.message} (${err.name})`
+//         );
+//       });
+//   }
+// };
 
 // const handleClick(event, video) => {
 //       if (video.paused) {
@@ -687,7 +687,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
     <div class="video-list">
       <ul>
         <li v-for="(video, index) in videos" :key="video.id">
-          <span @click="showVideo(index)" class="video-name">{{ video.name }}</span>
+          <span @click="() => { showVideo(index); setWindowTop(video); }" class="video-name">{{ video.name }}</span>
           <span @click="closeVideo(video)" class="close-btn">&times;</span>
         </li>
       </ul>
@@ -702,10 +702,6 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
             @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
             @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
             @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])" @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
-        " @dblclick="(e) => {
-        toggleFullScreen(($refs.videoElements as any[])[index], video, index);
-        setWindowTop(video);
-      }
         " x5-video-player-type="h5-page" autoplay controls></video>
         </div>
       </div>
