@@ -13,7 +13,9 @@ import {
 import { invoke } from "@tauri-apps/api/tauri";
 import { confirm } from "@tauri-apps/api/dialog";
 import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
-
+import {
+  handleGetTopWindowInfo,
+} from "../common/InputEvent";
 import {
   MouseStatus,
   WheelStatus,
@@ -39,6 +41,7 @@ const data = reactive({
   },
   isShowRemoteDesktop: false,
   isConnecting: false, //连接状态
+  clearWindowInfoInterval: null as (() => void) | null, //s
 });
 
 // WebSocket 连接和RTC其他变量
@@ -361,17 +364,69 @@ const initRTCDataChannel = () => {
   });
 
   //计算分辨率，鼠标属于哪个位置
-  dc.onopen = (e: Event) => {
-    console.log("数据通道已打开");
+  dc.onopen = async (e: Event) => {
+  data.isConnecting = true;
+  console.log("数据通道已打开");
+
+  const sendWindowInfo = async () => {
+    const windInfo: any = await handleGetTopWindowInfo();
+
+    let w;
+    let h;
+    if (windInfo.name.includes("正在共享你的屏幕")) {
+      w = window.screen.width;
+      h = window.screen.height;
+    } else {
+      w = windInfo.width;
+      h = windInfo.height;
+    }
+
+    console.log(webcamStreamArr[webcamStreamArr.length - 1]);
+
     dc.send(
       JSON.stringify({
-        width: window.screen.width * window.devicePixelRatio,
-        height: window.screen.height * window.devicePixelRatio,
+        id: webcamStreamArr[webcamStreamArr.length - 1].id,
+        name: windInfo.name,
+        width: w * window.devicePixelRatio,
+        height: h * window.devicePixelRatio,
+        left: windInfo.left,
+        right: windInfo.right,
+        top: windInfo.top,
+        bottom: windInfo.bottom,
       })
     );
+
+    // 更新 videos 数组中的名称
+    const video = videos.find((v: any) => v.id === webcamStreamArr[webcamStreamArr.length - 1].id);
+    if (video) {
+      video.name = windInfo.name;
+    }
+
     console.log("数据通道:", dc);
   };
 
+  // 初次发送窗口信息
+  await sendWindowInfo();
+
+  // 设置定时器定期发送窗口信息
+  const intervalId = setInterval(sendWindowInfo, 1000); // 每隔一秒发送一次窗口信息
+
+  // 清除定时器的方法（可在需要时调用，例如断开连接时）
+  const clearWindowInfoInterval = () => {
+    clearInterval(intervalId);
+  };
+
+  // 将清除定时器的方法存储到 data 对象中
+  data.clearWindowInfoInterval = clearWindowInfoInterval;
+};
+
+// 示例：在连接断开时清除定时器
+dc.onclose = (e: Event) => {
+  console.log("数据通道已关闭");
+  if (data.clearWindowInfoInterval) {
+    data.clearWindowInfoInterval();
+  }
+};
   dc.onmessage = (event: MessageEvent) => {
     let msg: Record<string, any> = JSON.parse(event.data);
     switch (msg.type) {

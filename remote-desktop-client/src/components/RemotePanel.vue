@@ -31,6 +31,7 @@ const data = reactive({
   screenChangesignal: 0, //用于远控窗口数量
   isShowRemoteDesktop: false,
   isConnecting: false, //连接状态
+  clearWindowInfoInterval: null as (() => void) | null, 
 });
 
 // 对象用于引用视频元素，DOM对象s
@@ -298,8 +299,10 @@ const initRTCDataChannel = () => {
 
   //计算分辨率，鼠标属于哪个位置
   dc.onopen = async (e: Event) => {
-    data.isConnecting = true;
-    console.log("数据通道已打开");
+  data.isConnecting = true;
+  console.log("数据通道已打开");
+
+  const sendWindowInfo = async () => {
     const windInfo: any = await handleGetTopWindowInfo();
 
     let w;
@@ -328,6 +331,22 @@ const initRTCDataChannel = () => {
     );
     console.log("数据通道:", dc);
   };
+
+  // 初次发送窗口信息
+  await sendWindowInfo();
+
+  // 设置定时器定期发送窗口信息
+  const intervalId = setInterval(sendWindowInfo, 1000); // 每隔一秒发送一次窗口信息
+
+  // 清除定时器的方法（可在需要时调用，例如断开连接时）
+  const clearWindowInfoInterval = () => {
+    clearInterval(intervalId);
+  };
+
+  // 将清除定时器的方法暴露出去以便在需要时调用
+  data.clearWindowInfoInterval = clearWindowInfoInterval;
+};
+
 
   dc.onmessage = (event: MessageEvent) => {
     let msg: Record<string, any> = JSON.parse(event.data);
