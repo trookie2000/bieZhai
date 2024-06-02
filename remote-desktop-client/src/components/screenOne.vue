@@ -629,7 +629,7 @@ const sendToClient = (msg: Record<string, any>) => {
   let msgJSON = JSON.stringify(msg);
   dc.readyState == "open" && dc.send(msgJSON);
 };
-const videos: any = reactive([]);
+const videos:any = reactive<Video[]>([]);
 //
 watch(
   videos,
@@ -671,7 +671,7 @@ const setActiveVideo = (index: number) => {
 };
 
 const showVideo = (video: Video) => {
-  activeVideoIndex.value = videos.findIndex(v => v.id === video.id);
+  activeVideoIndex.value = videos.findIndex((v: Video) => v.id === video.id);
 };
 
 
@@ -685,46 +685,6 @@ const addVideo = (stream: any) => {
   videos.push(videoObj);
 };
 
-// DONE 修复后的版本，之前此函数用于英语
-// const toggleFullScreen = (videoElement: any, vide: any, index: any) => {
-//   if (!document.fullscreenElement) {
-//     videoElement
-//       .requestFullscreen()
-//       .then(() => {
-//         videos[index].isFullscreen = true;
-//         handleFullscreenChange();
-//         setTimeout(() => {
-//           videoElement.controls = false; // 延迟隐藏控制栏
-//         }, 10); // 1秒后隐藏控制栏
-//         console.log("控制栏隐藏");
-//       })
-//       .catch((err: any) => {
-//         console.error(
-//           `Error attempting to enable full-screen mode: ${err.message} (${err.name})`
-//         );
-//       });
-//   } else {
-//     document
-//       .exitFullscreen()
-//       .then(() => {
-//         videos.forEach((v: any) => (v.isFullscreen = false));
-//         handleFullscreenChange();
-//         videoElement.controls = true; // 退出全屏后显示控制栏
-//       })
-//       .catch((err) => {
-//         console.error(
-//           `Error attempting to disable full-screen mode: ${err.message} (${err.name})`
-//         );
-//       });
-//   }
-// };
-
-// const handleClick(event, video) => {
-//       if (video.paused) {
-//         video.play(); // 如果视频暂停，则播放视频
-//       }
-//     },
-// 添加变量用于跟踪视频是否在全屏模式下
 const isVideoFullscreen = ref(true);
 const setWindowTop = (video: any) => {
 
@@ -800,7 +760,6 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
   </div>
 </template>
 
-
 <style lang="less" scoped>
 .container {
   display: flex;
@@ -827,6 +786,8 @@ video::-webkit-media-controls-enclosure {
 .video-name {
   flex-grow: 1;
   padding-right: 10px;
+  color: #ecf0f1;
+  font-weight: bold;
 }
 
 .videoElements {
@@ -841,7 +802,7 @@ video::-webkit-media-controls-enclosure {
 
 .close-btn {
   color: #e74c3c; /* 关闭按钮颜色 */
-  font-size: 18px;
+  font-size: 20px;
   font-weight: bold;
   cursor: pointer;
   transition: color 0.3s;
@@ -919,6 +880,8 @@ video {
   padding: 12px 15px; /* 调整内边距 */
   cursor: pointer;
   background-color: #34495e; /* 背景颜色 */
+  color: #ecf0f1; /* 字体颜色 */
+  font-weight: bold;
   transition: background-color 0.3s, color 0.3s;
 }
 
@@ -937,9 +900,11 @@ video {
   cursor: pointer;
   border-bottom: 1px solid #34495e; /* 边框颜色 */
   transition: background-color 0.3s, color 0.3s;
+  color: #bdc3c7; /* 子列表字体颜色 */
 }
 
 .video-item:hover {
   background-color: #3a566e;
+  color: #ecf0f1; /* 鼠标悬停时子列表字体颜色 */
 }
 </style>
