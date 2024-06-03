@@ -356,7 +356,6 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
       event.data
     );
 
-    console.log(event.data);
 
     //窗体位置发生变化的应对
     const video = videos.find((v: any) => v.stream.id == id);
@@ -687,7 +686,11 @@ const addVideo = (stream: any) => {
 
 const isVideoFullscreen = ref(true);
 const setWindowTop = (video: any) => {
-  // 只更新需要的属性，不修改video.name
+  // 保留原来的 video.name
+  const windowTitle = video.name;
+  console.log("Setting window top with title:", windowTitle);
+
+  // 只更新需要的属性，不修改 video.name
   remoteDesktopDpi = {
     width: video.width,
     height: video.height,
@@ -696,13 +699,15 @@ const setWindowTop = (video: any) => {
     top: video.top,
     bottom: video.bottom,
   };
+
   sendToClient({
     type: InputEventType.WINDOW_EVENT,
     data: {
-      windowTitle: video.name + "\0",
+      windowTitle: windowTitle + "\0",
     },
   });
 };
+
 
 
 // 监听视频全屏状态变化
