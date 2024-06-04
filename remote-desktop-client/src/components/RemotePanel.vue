@@ -502,7 +502,7 @@ const sendToClient = (msg: Record<string, any>) => {
     class="close-btn"
     @click="closeRemoteDesktop()"
   >
-    结束所有被控
+    结束被控
   </button>
   <div v-if="!data.isConnecting" class="sidebar">
     <div>

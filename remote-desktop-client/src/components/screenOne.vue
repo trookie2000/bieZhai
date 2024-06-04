@@ -107,7 +107,7 @@ const toggleDevice = (deviceId: string) => {
 };
 // 关闭远程桌面
 const closeRemoteDesktop = async () => {
-  const confirmed = await confirm("确认？", "提示");
+  const confirmed = await confirm("确认结束远程控制？", "提示");
   if (confirmed) {
     appWindow.setFullscreen(false);
     data.isShowRemoteDesktop = false;
@@ -795,12 +795,9 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
   flex: 1;
   display: grid;
   grid-template-columns: 1fr;
-  /* 每行一个视频 */
   grid-template-rows: 1fr;
-  /* 每列一个视频 */
   grid-gap: 10px;
-  background-color: #f0f4f7;
-  /* 背景颜色 */
+  background-color: #000000;
 }
 
 .video-wrapper.isTop {
@@ -830,7 +827,6 @@ video::-webkit-media-controls-enclosure {
 
 .close-btn {
   color: #000000;
-  /* 关闭按钮颜色 */
   font-size: 20px;
   font-weight: bold;
   cursor: pointer;
@@ -846,7 +842,6 @@ video::-webkit-media-controls-enclosure {
   width: 100%;
   height: 100%;
   cursor: none;
-  /* 隐藏鼠标光标 */
 }
 
 .video-wrapper {
@@ -857,12 +852,8 @@ video::-webkit-media-controls-enclosure {
   justify-content: center;
   align-items: center;
   background-color: #f0f4f7;
-  /* 视频容器背景颜色 */
-  border-radius: 10px;
-  /* 圆角边框 */
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-  /* 添加阴影 */
 }
 
 video {
@@ -870,19 +861,14 @@ video {
   width: 100%;
   height: 100%;
   border-radius: 10px;
-  /* 圆角边框 */
 }
 
 .video-list {
   width: 220px;
-  /* 调整列表宽度 */
   background-color: #3498db;
-  /* 更亮的蓝色背景 */
   border-right: 2px solid #2980b9;
-  /* 边框颜色 */
   overflow-y: auto;
   color: #ecf0f1;
-  /* 字体颜色 */
   padding: 15px 0;
 }
 
@@ -895,31 +881,27 @@ video {
 .video-list li {
   display: flex;
   flex-direction: column;
-  /* 垂直排列子列表 */
   justify-content: space-between;
   align-items: flex-start;
   padding: 12px 15px;
-  /* 调整内边距 */
   cursor: pointer;
   border-bottom: 1px solid #2980b9;
-  /* 边框颜色 */
   transition: background-color 0.3s, color 0.3s;
 }
 
 
 .device-item {
   margin-bottom: 10px;
-  /* 调整父项间距 */
 }
 
 .device-name {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 15px; /* 调整内边距 */
+  padding: px 0px;
   cursor: pointer;
-  background-color: #3498db; /* 背景颜色 */
-  color: #ecf0f1; /* 字体颜色 */
+  background-color: #3498db;
+  color: #ecf0f1;
   font-weight: bold;
   transition: background-color 0.3s, color 0.3s;
 }
@@ -936,30 +918,24 @@ video {
 
 .sub-list {
   padding-left: 15px;
-  /* 子列表缩进 */
   border-left: 2px solid #2980b9;
-  /* 子列表边框颜色 */
   margin-top: 5px;
-  /* 调整子列表上间距 */
 }
 
 .video-item {
   display: flex;
   align-items: center;
   padding: 8px 15px;
-  /* 调整内边距 */
   cursor: pointer;
   border-bottom: 1px solid #2980b9;
-  /* 边框颜色 */
   transition: background-color 0.3s, color 0.3s;
   color: #ecf0f1;
-  /* 子列表字体颜色 */
 }
 
 .video-item:hover {
   background-color: #2980b9;
-  color: #ecf0f1; /* 鼠标悬停时子列表字体颜色 */
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 添加阴影 */
+  color: #ecf0f1;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 .icon {
   margin-right: 10px;
