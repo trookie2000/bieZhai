@@ -742,6 +742,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
         <li v-for="(videos, deviceId) in groupedVideos" :key="deviceId" class="device-item">
           <div @click="toggleDevice(deviceId)" class="device-name">
             <i class="icon fas fa-desktop"></i>{{ deviceId }}
+            <i :class="['icon', 'fas', activeDeviceId === deviceId ? 'fa-chevron-down' : 'fa-chevron-right']"></i>
           </div>
           <ul v-show="activeDeviceId === deviceId" class="sub-list">
             <li v-for="video in videos" :key="video.id" class="video-item">
@@ -753,7 +754,6 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
                   <i class="icon fas fa-times"></i>
                 </span>
               </div>
-
             </li>
           </ul>
         </li>
@@ -837,9 +837,6 @@ video::-webkit-media-controls-enclosure {
   transition: color 0.3s;
 }
 
-.close-btn:hover {
-  color: #c0392b;
-}
 
 .close-btn:hover {
   color: #ff5a5a;
@@ -909,9 +906,6 @@ video {
   transition: background-color 0.3s, color 0.3s;
 }
 
-.video-list li:hover {
-  background-color: #2980b9;
-}
 
 .device-item {
   margin-bottom: 10px;
@@ -921,15 +915,19 @@ video {
 .device-name {
   display: flex;
   align-items: center;
-  padding: 12px 15px;
-  /* 调整内边距 */
+  justify-content: space-between;
+  padding: 12px 15px; /* 调整内边距 */
   cursor: pointer;
-  background-color: #3498db;
-  /* 背景颜色 */
-  color: #ecf0f1;
-  /* 字体颜色 */
+  background-color: #3498db; /* 背景颜色 */
+  color: #ecf0f1; /* 字体颜色 */
   font-weight: bold;
   transition: background-color 0.3s, color 0.3s;
+}
+
+.device-name .icon {
+  margin-left: 10px;
+  font-size: 14px;
+  transition: transform 0.3s;
 }
 
 .device-name:hover {
@@ -960,10 +958,9 @@ video {
 
 .video-item:hover {
   background-color: #2980b9;
-  color: #ecf0f1;
-  /* 鼠标悬停时子列表字体颜色 */
+  color: #ecf0f1; /* 鼠标悬停时子列表字体颜色 */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 添加阴影 */
 }
-
 .icon {
   margin-right: 10px;
 }
