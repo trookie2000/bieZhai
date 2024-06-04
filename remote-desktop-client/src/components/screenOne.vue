@@ -359,7 +359,9 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
 
     //窗体位置发生变化的应对
     const video = videos.find((v: any) => v.stream.id == id);
-    video.name = name;
+    if (!video.name) {
+      video.name = name;
+    }
     video.streamId = id;
     video.width = width;
     video.height = height;
@@ -392,68 +394,68 @@ const initRTCDataChannel = () => {
 
   //计算分辨率，鼠标属于哪个位置
   dc.onopen = async (e: Event) => {
-  data.isConnecting = true;
-  console.log("数据通道已打开");
+    data.isConnecting = true;
+    console.log("数据通道已打开");
 
-  const sendWindowInfo = async () => {
-    const windInfo: any = await handleGetTopWindowInfo();
+    const sendWindowInfo = async () => {
+      const windInfo: any = await handleGetTopWindowInfo();
 
-    let w;
-    let h;
-    if (windInfo.name.includes("正在共享你的屏幕")) {
-      w = window.screen.width;
-      h = window.screen.height;
-    } else {
-      w = windInfo.width;
-      h = windInfo.height;
-    }
+      let w;
+      let h;
+      if (windInfo.name.includes("正在共享你的屏幕")) {
+        w = window.screen.width;
+        h = window.screen.height;
+      } else {
+        w = windInfo.width;
+        h = windInfo.height;
+      }
 
-    console.log(webcamStreamArr[webcamStreamArr.length - 1]);
+      console.log(webcamStreamArr[webcamStreamArr.length - 1]);
 
-    dc.send(
-      JSON.stringify({
-        id: webcamStreamArr[webcamStreamArr.length - 1].id,
-        name: windInfo.name,
-        width: w * window.devicePixelRatio,
-        height: h * window.devicePixelRatio,
-        left: windInfo.left,
-        right: windInfo.right,
-        top: windInfo.top,
-        bottom: windInfo.bottom,
-      })
-    );
+      dc.send(
+        JSON.stringify({
+          id: webcamStreamArr[webcamStreamArr.length - 1].id,
+          name: windInfo.name,
+          width: w * window.devicePixelRatio,
+          height: h * window.devicePixelRatio,
+          left: windInfo.left,
+          right: windInfo.right,
+          top: windInfo.top,
+          bottom: windInfo.bottom,
+        })
+      );
 
-    // 更新 videos 数组中的名称
-    const video = videos.find((v: any) => v.id === webcamStreamArr[webcamStreamArr.length - 1].id);
-    if (video) {
-      video.name = windInfo.name;
-    }
+      // 更新 videos 数组中的名称
+      const video = videos.find((v: any) => v.id === webcamStreamArr[webcamStreamArr.length - 1].id);
+      if (video) {
+        // video.name = windInfo.name;
+      }
 
-    console.log("数据通道:", dc);
+      console.log("数据通道:", dc);
+    };
+
+    // 初次发送窗口信息
+    await sendWindowInfo();
+
+    // 设置定时器定期发送窗口信息
+    const intervalId = setInterval(sendWindowInfo, 1000); // 每隔一秒发送一次窗口信息
+
+    // 清除定时器的方法（可在需要时调用，例如断开连接时）
+    const clearWindowInfoInterval = () => {
+      clearInterval(intervalId);
+    };
+
+    // 将清除定时器的方法存储到 data 对象中
+    data.clearWindowInfoInterval = clearWindowInfoInterval;
   };
 
-  // 初次发送窗口信息
-  await sendWindowInfo();
-
-  // 设置定时器定期发送窗口信息
-  const intervalId = setInterval(sendWindowInfo, 1000); // 每隔一秒发送一次窗口信息
-
-  // 清除定时器的方法（可在需要时调用，例如断开连接时）
-  const clearWindowInfoInterval = () => {
-    clearInterval(intervalId);
+  // 示例：在连接断开时清除定时器
+  dc.onclose = (e: Event) => {
+    console.log("数据通道已关闭");
+    if (data.clearWindowInfoInterval) {
+      data.clearWindowInfoInterval();
+    }
   };
-
-  // 将清除定时器的方法存储到 data 对象中
-  data.clearWindowInfoInterval = clearWindowInfoInterval;
-};
-
-// 示例：在连接断开时清除定时器
-dc.onclose = (e: Event) => {
-  console.log("数据通道已关闭");
-  if (data.clearWindowInfoInterval) {
-    data.clearWindowInfoInterval();
-  }
-};
   dc.onmessage = (event: MessageEvent) => {
     let msg: Record<string, any> = JSON.parse(event.data);
     switch (msg.type) {
@@ -628,7 +630,7 @@ const sendToClient = (msg: Record<string, any>) => {
   let msgJSON = JSON.stringify(msg);
   dc.readyState == "open" && dc.send(msgJSON);
 };
-const videos:any = reactive<Video[]>([]);
+const videos: any = reactive<Video[]>([]);
 //
 watch(
   videos,
@@ -679,7 +681,7 @@ const addVideo = (stream: any) => {
     id: Date.now().toString(),
     stream,
     receiverAccount: { id: data.receiverAccount.id }, // 确保包含 receiverAccount.id
-    name: `Video ${videos.length + 1}`,
+    name: '',
   };
   videos.push(videoObj);
 };
@@ -688,7 +690,7 @@ const isVideoFullscreen = ref(true);
 const setWindowTop = (video: any) => {
   // 保留原来的 video.name
   const windowTitle = video.name;
-  console.log("Setting window top with title:", windowTitle);
+  // console.log("Setting window top with title:", windowTitle);
 
   // 只更新需要的属性，不修改 video.name
   remoteDesktopDpi = {
@@ -751,7 +753,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
                   <i class="icon fas fa-times"></i>
                 </span>
               </div>
-              
+
             </li>
           </ul>
         </li>
@@ -767,7 +769,7 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
             @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
             @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
             @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])" @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
-        " x5-video-player-type="h5-page" autoplay controls></video>
+          " x5-video-player-type="h5-page" autoplay controls></video>
         </div>
       </div>
     </div>
@@ -781,19 +783,24 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
   display: flex;
   height: 100vh;
 }
+
 .video-item-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
 }
+
 .video-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr; /* 每行一个视频 */
-  grid-template-rows: 1fr; /* 每列一个视频 */
+  grid-template-columns: 1fr;
+  /* 每行一个视频 */
+  grid-template-rows: 1fr;
+  /* 每列一个视频 */
   grid-gap: 10px;
-  background-color: #f0f4f7; /* 背景颜色 */
+  background-color: #f0f4f7;
+  /* 背景颜色 */
 }
 
 .video-wrapper.isTop {
@@ -822,7 +829,8 @@ video::-webkit-media-controls-enclosure {
 }
 
 .close-btn {
-  color: #000000; /* 关闭按钮颜色 */
+  color: #000000;
+  /* 关闭按钮颜色 */
   font-size: 20px;
   font-weight: bold;
   cursor: pointer;
@@ -840,7 +848,8 @@ video::-webkit-media-controls-enclosure {
 .video-container {
   width: 100%;
   height: 100%;
-  cursor: none; /* 隐藏鼠标光标 */
+  cursor: none;
+  /* 隐藏鼠标光标 */
 }
 
 .video-wrapper {
@@ -850,25 +859,33 @@ video::-webkit-media-controls-enclosure {
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #f0f4f7; /* 视频容器背景颜色 */
-  border-radius: 10px; /* 圆角边框 */
+  background-color: #f0f4f7;
+  /* 视频容器背景颜色 */
+  border-radius: 10px;
+  /* 圆角边框 */
   overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); /* 添加阴影 */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  /* 添加阴影 */
 }
 
 video {
   position: relative;
   width: 100%;
   height: 100%;
-  border-radius: 10px; /* 圆角边框 */
+  border-radius: 10px;
+  /* 圆角边框 */
 }
 
 .video-list {
-  width: 220px; /* 调整列表宽度 */
-  background-color: #3498db; /* 更亮的蓝色背景 */
-  border-right: 2px solid #2980b9; /* 边框颜色 */
+  width: 220px;
+  /* 调整列表宽度 */
+  background-color: #3498db;
+  /* 更亮的蓝色背景 */
+  border-right: 2px solid #2980b9;
+  /* 边框颜色 */
   overflow-y: auto;
-  color: #ecf0f1; /* 字体颜色 */
+  color: #ecf0f1;
+  /* 字体颜色 */
   padding: 15px 0;
 }
 
@@ -880,12 +897,15 @@ video {
 
 .video-list li {
   display: flex;
-  flex-direction: column; /* 垂直排列子列表 */
+  flex-direction: column;
+  /* 垂直排列子列表 */
   justify-content: space-between;
   align-items: flex-start;
-  padding: 12px 15px; /* 调整内边距 */
+  padding: 12px 15px;
+  /* 调整内边距 */
   cursor: pointer;
-  border-bottom: 1px solid #2980b9; /* 边框颜色 */
+  border-bottom: 1px solid #2980b9;
+  /* 边框颜色 */
   transition: background-color 0.3s, color 0.3s;
 }
 
@@ -894,16 +914,20 @@ video {
 }
 
 .device-item {
-  margin-bottom: 10px; /* 调整父项间距 */
+  margin-bottom: 10px;
+  /* 调整父项间距 */
 }
 
 .device-name {
   display: flex;
   align-items: center;
-  padding: 12px 15px; /* 调整内边距 */
+  padding: 12px 15px;
+  /* 调整内边距 */
   cursor: pointer;
-  background-color: #3498db; /* 背景颜色 */
-  color: #ecf0f1; /* 字体颜色 */
+  background-color: #3498db;
+  /* 背景颜色 */
+  color: #ecf0f1;
+  /* 字体颜色 */
   font-weight: bold;
   transition: background-color 0.3s, color 0.3s;
 }
@@ -913,24 +937,31 @@ video {
 }
 
 .sub-list {
-  padding-left: 15px; /* 子列表缩进 */
-  border-left: 2px solid #2980b9; /* 子列表边框颜色 */
-  margin-top: 5px; /* 调整子列表上间距 */
+  padding-left: 15px;
+  /* 子列表缩进 */
+  border-left: 2px solid #2980b9;
+  /* 子列表边框颜色 */
+  margin-top: 5px;
+  /* 调整子列表上间距 */
 }
 
 .video-item {
   display: flex;
   align-items: center;
-  padding: 8px 15px; /* 调整内边距 */
+  padding: 8px 15px;
+  /* 调整内边距 */
   cursor: pointer;
-  border-bottom: 1px solid #2980b9; /* 边框颜色 */
+  border-bottom: 1px solid #2980b9;
+  /* 边框颜色 */
   transition: background-color 0.3s, color 0.3s;
-  color: #ecf0f1; /* 子列表字体颜色 */
+  color: #ecf0f1;
+  /* 子列表字体颜色 */
 }
 
 .video-item:hover {
   background-color: #2980b9;
-  color: #ecf0f1; /* 鼠标悬停时子列表字体颜色 */
+  color: #ecf0f1;
+  /* 鼠标悬停时子列表字体颜色 */
 }
 
 .icon {
