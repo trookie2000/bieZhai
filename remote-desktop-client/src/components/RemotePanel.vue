@@ -139,10 +139,10 @@ const handleNewICECandidateMsg = async (msg: Record<string, any>) => {
 };
 
 const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
-  if (msg.msg != data.account.password) {
-    console.log("密码错误！");
-    return;
-  }
+  // if (msg.msg != data.account.password) {
+  //   console.log("密码错误！");
+  //   return;
+  // }
 
   data.receiverAccount.id = msg.sender;
 
@@ -351,7 +351,7 @@ const sendOffer = async () => {
 
 // 请求远程桌面
 const remoteDesktop = async () => {
-  if (!data.receiverAccount.id || !data.receiverAccount.password) {
+  if (!data.receiverAccount.id) {
     alert("请输入ID和密码");
     return;
   }
@@ -446,14 +446,14 @@ const selectDevice = (device: { ip: string, password: string }) => {
       <p>
         ip: <span>{{ data.account.id }}</span>
       </p>
-      <p>
+      <!-- <p>
         password: <span>{{ data.account.password }}</span>
-      </p>
+      </p> -->
     </div>
   </div>
   <div v-if="!data.isConnecting" class="form">
-    <input v-model="data.receiverAccount.id" type="text" placeholder="请输入对方id" />
-    <input v-model="data.receiverAccount.password" type="text" placeholder="请输入对方密码" />
+    <input v-model="data.receiverAccount.id" type="text" placeholder="请输入对方ip" />
+    <!-- <input v-model="data.receiverAccount.password" type="text" placeholder="请输入对方密码" /> -->
     <button @click="remoteDesktop()">发起远程</button>
   </div>
   <ul>
