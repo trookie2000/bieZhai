@@ -865,8 +865,8 @@ video {
 
 .video-list {
   width: 220px;
-  background-color: #3498db;
-  border-right: 2px solid #2980b9;
+  background-color: #1e88e5;
+  border-right: 2px solid #1e88e5;
   overflow-y: auto;
   color: #ecf0f1;
   padding: 15px 0;
@@ -885,7 +885,7 @@ video {
   align-items: flex-start;
   padding: 12px 15px;
   cursor: pointer;
-  border-bottom: 1px solid #2980b9;
+  border-bottom: 1px solid #1e88e5;
   transition: background-color 0.3s, color 0.3s;
 }
 

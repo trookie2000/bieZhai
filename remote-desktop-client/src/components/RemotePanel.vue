@@ -32,6 +32,16 @@ const data = reactive({
   clearWindowInfoInterval: null as (() => void) | null,
   deviceList: [] as { ip: string, password: string }[], // List to store devices
 });
+const isDeviceListOpen = ref(false);
+
+const toggleDeviceList = () => {
+  isDeviceListOpen.value = !isDeviceListOpen.value;
+};
+
+const removeDevice = (index: number) => {
+  data.deviceList.splice(index, 1);
+};
+
 
 // 对象用于引用视频元素，DOM对象s
 const desktop = ref<HTMLVideoElement>();
@@ -369,7 +379,7 @@ const remoteDesktop = async () => {
     url: "#/screenOne",
   });
 
-  webview.once("tauri://created", function () {});
+  webview.once("tauri://created", function () { });
 
   webview.once("tauri://error", function (e) {
     console.error("Webview error:", e);
@@ -429,12 +439,12 @@ const sendToClient = (msg: Record<string, any>) => {
   dc.readyState == "open" && dc.send(msgJSON);
 };
 
-const selectDevice = (device: { ip: string, password: string }) => {
+const selectDevice = (device:{ip:string}) => {
+  console.log(`Selected device IP: ${device.ip}`);
   data.receiverAccount.id = device.ip;
   // data.receiverAccount.password = device.password;
 };
 </script>
-
 <template>
   <div v-if="data.isConnecting" class="connecting-message" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0">
     正在被远控{{ data.screenChangesignal }}个窗口...
@@ -444,11 +454,24 @@ const selectDevice = (device: { ip: string, password: string }) => {
   </button>
   <div class="container">
     <div class="sidebar">
-      <ul class="device-list">
-        <li v-for="(device, index) in data.deviceList" :key="index" @click="selectDevice(device)">
-          {{ device.ip }}
-        </li>
-      </ul>
+      <div class="device-list-container">
+        <div @click="toggleDeviceList" class="device-list-title">
+          <i class="icon fas fa-desktop"></i>设备列表
+          <i :class="['icon', 'fas', isDeviceListOpen ? 'fa-chevron-down' : 'fa-chevron-right']"></i>
+        </div>
+        <ul v-show="isDeviceListOpen" class="device-list">
+          <li v-for="(device, index) in data.deviceList" :key="index" class="device-item">
+            <div class="device-item-content" @click="selectDevice(device)">
+              <span>
+                {{ device.ip }}
+              </span>
+              <span class="close-btn" @click.stop="removeDevice(index)">
+                &times;
+              </span>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
     <div class="main">
       <div class="ip-display">
@@ -461,7 +484,6 @@ const selectDevice = (device: { ip: string, password: string }) => {
     </div>
   </div>
 </template>
-
 
 <style lang="less" scoped>
 .container {
@@ -482,22 +504,57 @@ const selectDevice = (device: { ip: string, password: string }) => {
   box-sizing: border-box;
   padding: 20px;
 
+  .device-list-container {
+    width: 100%;
+  }
+
+  .device-list-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background: #42a5f5;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    cursor: pointer;
+
+    .icon {
+      margin-left: 10px;
+    }
+
+    &:hover {
+      background: #90caf9;
+    }
+  }
+
   .device-list {
     list-style: none;
     padding: 0;
     margin: 0;
     width: 100%;
 
-    li {
+    .device-item {
+      display: flex;
+      align-items: center;
       padding: 10px;
       background: #64b5f6;
       margin-bottom: 10px;
       border-radius: 5px;
       cursor: pointer;
-      text-align: center;
-      
+
       &:hover {
         background: #90caf9;
+      }
+
+      .device-item-content {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+      }
+
+      .close-btn {
+        color: red;
+        cursor: pointer;
       }
     }
   }
@@ -519,7 +576,7 @@ const selectDevice = (device: { ip: string, password: string }) => {
   color: #fafafa;
   font-size: 18px;
   font-weight: 600;
-  margin-bottom: 20px;
+  margin-bottom: 230px;
 }
 
 .connecting-message {
@@ -550,7 +607,7 @@ const selectDevice = (device: { ip: string, password: string }) => {
   }
 }
 
-.form button:hover{
+.form button:hover {
   background-color: #2980b9;
 }
 
@@ -573,14 +630,7 @@ button {
 }
 
 .close-btn {
-  width: 60px;
-  height: 24px;
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 1;
-  background: #d71526;
-  font-size: 12px;
+  color: red;
+  cursor: pointer;
 }
 </style>
-
