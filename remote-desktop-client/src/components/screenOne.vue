@@ -59,6 +59,7 @@ onBeforeMount(async () => {
   initWebSocket();
 });
 onMounted(() => {
+  
   remoteDesktop(); // 在组件挂载时调用 remoteDesktop 方法
   appWindow
     .onCloseRequested(async (event) => {
@@ -130,9 +131,7 @@ const closeRemoteDesktop = async () => {
   }
 };
 /********************************* connect *************************************/
-eventBus.on('event', () => {
-  console.log('event emitted');
-});
+
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
   ws = new WebSocket(`ws://192.168.1.101:8081/conn/${data.account.id}`);
@@ -351,8 +350,7 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
   dc = e.channel;
   dc.onopen = (e: Event) => {
     console.log("数据通道已打开");
-    eventBus.emit('addDevice', data.receiverAccount.id);
-    
+    console.log("发送事件 addDevice,设备IP:", data.receiverAccount.id);
   };
 
   dc.onmessage = (event: MessageEvent) => {
@@ -392,6 +390,7 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
 
 // 初始化 WebRTC 数据通道
 const initRTCDataChannel = () => {
+  eventBus.emit('addDevice', data.receiverAccount.id);
   dc = pc.createDataChannel("my channel", {
     ordered: true,
   });

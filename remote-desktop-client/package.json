@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^1.0.2",
+    "mitt": "^3.0.1",
     "tauri-plugin-websocket-api": "github:tauri-apps/tauri-plugin-websocket#v1",
     "vue": "^3.2.37",
     "vue-router": "^4.3.0",

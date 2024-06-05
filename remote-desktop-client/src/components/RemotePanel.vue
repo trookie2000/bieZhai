@@ -61,6 +61,16 @@ onBeforeMount(async () => {
 });
 
 onMounted(() => {
+  eventBus.on('addDevice', (deviceIp: any) => {
+  console.log("接收到事件 addDevice设备IP:", deviceIp);
+  if (!data.deviceList.some(device => device.ip === deviceIp)) {
+    data.deviceList.push({
+      ip: deviceIp,
+      password: '',  // 或者填充其他所需的值
+    });
+  }
+  console.log("更新后的设备列表:", data.deviceList);
+});
   appWindow
     .onCloseRequested(async (event) => {
       event.preventDefault();
@@ -360,13 +370,14 @@ const sendOffer = async () => {
   });
 };
 
+
 // 请求远程桌面
 const remoteDesktop = async () => {
   if (!data.receiverAccount.id) {
     alert("请输入IP地址");
     return;
   }
-
+  eventBus.emit('event');
   // 判断是否已存在相同的IP
   // const exists = data.deviceList.some(device => device.ip === data.receiverAccount.id);
   // if (!exists) {
@@ -375,7 +386,6 @@ const remoteDesktop = async () => {
   //     password: data.receiverAccount.password,
   //   });
   // }
-  eventBus.emit('event');
   const webview = new WebviewWindow("1", {
     url: "#/screenOne",
   });
