@@ -16,7 +16,7 @@ import {
   handleMouseEvent,
   handleWindowTop,
 } from "../common/InputEvent";
-
+import  eventBus from '../common/eventBus';  // 引入事件总线
 const data = reactive({
   account: {
     id: "",
@@ -32,6 +32,7 @@ const data = reactive({
   clearWindowInfoInterval: null as (() => void) | null,
   deviceList: [] as { ip: string, password: string }[], // List to store devices
 });
+
 const isDeviceListOpen = ref(false);
 
 const toggleDeviceList = () => {
@@ -367,14 +368,14 @@ const remoteDesktop = async () => {
   }
 
   // 判断是否已存在相同的IP
-  const exists = data.deviceList.some(device => device.ip === data.receiverAccount.id);
-  if (!exists) {
-    data.deviceList.push({
-      ip: data.receiverAccount.id,
-      password: data.receiverAccount.password,
-    });
-  }
-
+  // const exists = data.deviceList.some(device => device.ip === data.receiverAccount.id);
+  // if (!exists) {
+  //   data.deviceList.push({
+  //     ip: data.receiverAccount.id,
+  //     password: data.receiverAccount.password,
+  //   });
+  // }
+  eventBus.emit('event');
   const webview = new WebviewWindow("1", {
     url: "#/screenOne",
   });

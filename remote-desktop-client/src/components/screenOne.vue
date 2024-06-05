@@ -28,7 +28,7 @@ import {
   handleMouseEvent,
   handleWindowTop,
 } from "../common/InputEvent";
-
+import eventBus from '../common/eventBus';  // 引入事件总线
 // 用于存储响应式数据的对象
 const data = reactive({
   account: {
@@ -130,7 +130,9 @@ const closeRemoteDesktop = async () => {
   }
 };
 /********************************* connect *************************************/
-
+eventBus.on('event', () => {
+  console.log('event emitted');
+});
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
   ws = new WebSocket(`ws://192.168.1.101:8081/conn/${data.account.id}`);
@@ -349,6 +351,8 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
   dc = e.channel;
   dc.onopen = (e: Event) => {
     console.log("数据通道已打开");
+    eventBus.emit('addDevice', data.receiverAccount.id);
+    
   };
 
   dc.onmessage = (event: MessageEvent) => {
@@ -471,7 +475,7 @@ const initRTCDataChannel = () => {
   dc.onclose = (e: Event) => {
     console.log("数据通道已关闭");
   };
-
+  
   console.log("数据通道:", dc);
 };
 
