@@ -352,11 +352,18 @@ const sendOffer = async () => {
 // 请求远程桌面
 const remoteDesktop = async () => {
   if (!data.receiverAccount.id) {
-    alert("请输入ID和密码");
+    alert("请输入IP地址");
     return;
   }
 
-  const uniqueLabel = `webview_${Date.now()}`;
+  // 判断是否已存在相同的IP
+  const exists = data.deviceList.some(device => device.ip === data.receiverAccount.id);
+  if (!exists) {
+    data.deviceList.push({
+      ip: data.receiverAccount.id,
+      password: data.receiverAccount.password,
+    });
+  }
 
   const webview = new WebviewWindow("1", {
     url: "#/screenOne",
@@ -373,12 +380,6 @@ const remoteDesktop = async () => {
     receiver: data.receiverAccount.id,
     msg: data.receiverAccount.password,
     sender: data.account.id,
-  });
-
-  // Save the device to the list
-  data.deviceList.push({
-    ip: data.receiverAccount.id,
-    password: data.receiverAccount.password,
   });
 };
 
@@ -430,68 +431,95 @@ const sendToClient = (msg: Record<string, any>) => {
 
 const selectDevice = (device: { ip: string, password: string }) => {
   data.receiverAccount.id = device.ip;
-  data.receiverAccount.password = device.password;
+  // data.receiverAccount.password = device.password;
 };
 </script>
 
 <template>
-  <div v-if="data.isConnecting" class="connecting-message sidebarr" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0">
+  <div v-if="data.isConnecting" class="connecting-message" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0">
     正在被远控{{ data.screenChangesignal }}个窗口...
   </div>
   <button v-if="data.isConnecting" class="close-btn" @click="closeRemoteDesktop()">
     结束被控
   </button>
-  <div v-if="!data.isConnecting" class="sidebar">
-    <div>
-      <p>
+  <div class="container">
+    <div class="sidebar">
+      <ul class="device-list">
+        <li v-for="(device, index) in data.deviceList" :key="index" @click="selectDevice(device)">
+          {{ device.ip }}
+        </li>
+      </ul>
+    </div>
+    <div class="main">
+      <div class="ip-display">
         ip: <span>{{ data.account.id }}</span>
-      </p>
-      <!-- <p>
-        password: <span>{{ data.account.password }}</span>
-      </p> -->
+      </div>
+      <div v-if="!data.isConnecting" class="form">
+        <input v-model="data.receiverAccount.id" type="text" placeholder="请输入对方ip" />
+        <button @click="remoteDesktop()">发起远程</button>
+      </div>
     </div>
   </div>
-  <div v-if="!data.isConnecting" class="form">
-    <input v-model="data.receiverAccount.id" type="text" placeholder="请输入对方ip" />
-    <!-- <input v-model="data.receiverAccount.password" type="text" placeholder="请输入对方密码" /> -->
-    <button @click="remoteDesktop()">发起远程</button>
-  </div>
-  <ul>
-    <li v-for="(device, index) in data.deviceList" :key="index" @click="selectDevice(device)">
-      {{ device.ip }} - {{ device.password }}
-    </li>
-  </ul>
 </template>
 
 
 <style lang="less" scoped>
+.container {
+  display: flex;
+  height: 100%;
+}
+
 .sidebar {
-  width: 100%;
-  height: 160px;
-  background: #1b1b1c;
+  width: 200px;
+  height: 100%;
+  background: #2196f3;
   color: #fafafa;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  border-right: 1px solid #1e88e5;
+  box-sizing: border-box;
+  padding: 20px;
+
+  .device-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+
+    li {
+      padding: 10px;
+      background: #64b5f6;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      text-align: center;
+      
+      &:hover {
+        background: #90caf9;
+      }
+    }
+  }
+}
+
+.main {
+  flex-grow: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  border-bottom: 1px solid #252525;
-  box-sizing: border-box;
+  background: #1b1b1c;
+}
 
-  > div {
-    background: #242425;
-    padding: 10px 20px;
-    border-radius: 10px;
-
-    p {
-      line-height: 28px;
-      font-size: 16px;
-
-      span {
-        font-size: 18px;
-        font-weight: 600;
-      }
-    }
-  }
+.ip-display {
+  background: #424242;
+  padding: 10px 20px;
+  border-radius: 10px;
+  color: #fafafa;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 20px;
 }
 
 .connecting-message {
@@ -509,18 +537,21 @@ const selectDevice = (device: { ip: string, password: string }) => {
 }
 
 .form {
-  height: calc(100% - 160px);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: #1b1b1c;
 
   button {
     width: 280px;
     height: 34px;
     background: #00c1cd;
+    cursor: pointer;
   }
+}
+
+.form button:hover{
+  background-color: #2980b9;
 }
 
 input {
@@ -541,17 +572,6 @@ button {
   border-radius: 5px;
 }
 
-.desktop {
-  width: 100%;
-  height: 100%;
-  position: fixed;
-  top: 0;
-  left: 0;
-  background: #121212;
-  cursor: none;
-  z-index: 9999;
-}
-
 .close-btn {
   width: 60px;
   height: 24px;
@@ -563,3 +583,4 @@ button {
   font-size: 12px;
 }
 </style>
+
