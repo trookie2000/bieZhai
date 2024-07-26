@@ -78,7 +78,7 @@ onUnmounted(() => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://192.168.1.101:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://10.134.147.78:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     setInterval(() => {
@@ -537,7 +537,7 @@ const selectDevice = (device:{ip:string}) => {
       display: flex;
       align-items: center;
       padding: 10px;
-      background: #64b5f6;
+      background: #ffffff;
       margin-bottom: 10px;
       border-radius: 5px;
       cursor: pointer;
