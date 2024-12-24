@@ -28,7 +28,7 @@ import {
   handleMouseEvent,
   handleWindowTop,
 } from "../common/InputEvent";
-import eventBus from '../common/eventBus';  // 引入事件总线
+
 // 用于存储响应式数据的对象
 const data = reactive({
   account: {
@@ -59,7 +59,6 @@ onBeforeMount(async () => {
   initWebSocket();
 });
 onMounted(() => {
-  
   remoteDesktop(); // 在组件挂载时调用 remoteDesktop 方法
   appWindow
     .onCloseRequested(async (event) => {
@@ -134,7 +133,7 @@ const closeRemoteDesktop = async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://192.168.1.10:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://172.30.176.1:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -362,7 +361,6 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
   dc = e.channel;
   dc.onopen = (e: Event) => {
     console.log("数据通道已打开");
-    console.log("发送事件 addDevice,设备IP:", data.receiverAccount.id);
   };
 
   dc.onmessage = (event: MessageEvent) => {
@@ -402,7 +400,6 @@ const handleDataChannel = (e: RTCDataChannelEvent) => {
 
 // 初始化 WebRTC 数据通道
 const initRTCDataChannel = () => {
-  eventBus.emit('addDevice', data.receiverAccount.id);
   dc = pc.createDataChannel("my channel", {
     ordered: true,
   });
@@ -486,7 +483,7 @@ const initRTCDataChannel = () => {
   dc.onclose = (e: Event) => {
     console.log("数据通道已关闭");
   };
-  
+
   console.log("数据通道:", dc);
 };
 
