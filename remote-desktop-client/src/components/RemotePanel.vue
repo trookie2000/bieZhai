@@ -16,7 +16,7 @@ import {
   handleMouseEvent,
   handleWindowTop,
 } from "../common/InputEvent";
-
+import  eventBus from '../common/eventBus';  // 引入事件总线
 const data = reactive({
   account: {
     id: "",
@@ -32,6 +32,7 @@ const data = reactive({
   clearWindowInfoInterval: null as (() => void) | null,
   deviceList: [] as { ip: string, password: string }[], // List to store devices
 });
+
 const isDeviceListOpen = ref(false);
 
 const toggleDeviceList = () => {
@@ -60,6 +61,16 @@ onBeforeMount(async () => {
 });
 
 onMounted(() => {
+  eventBus.on('addDevice', (deviceIp: any) => {
+  console.log("接收到事件 addDevice设备IP:", deviceIp);
+  if (!data.deviceList.some(device => device.ip === deviceIp)) {
+    data.deviceList.push({
+      ip: deviceIp,
+      password: '',  // 或者填充其他所需的值
+    });
+  }
+  console.log("更新后的设备列表:", data.deviceList);
+});
   appWindow
     .onCloseRequested(async (event) => {
       event.preventDefault();
@@ -359,22 +370,22 @@ const sendOffer = async () => {
   });
 };
 
+
 // 请求远程桌面
 const remoteDesktop = async () => {
   if (!data.receiverAccount.id) {
     alert("请输入IP地址");
     return;
   }
-
+  eventBus.emit('event');
   // 判断是否已存在相同的IP
-  const exists = data.deviceList.some(device => device.ip === data.receiverAccount.id);
-  if (!exists) {
-    data.deviceList.push({
-      ip: data.receiverAccount.id,
-      password: data.receiverAccount.password,
-    });
-  }
-
+  // const exists = data.deviceList.some(device => device.ip === data.receiverAccount.id);
+  // if (!exists) {
+  //   data.deviceList.push({
+  //     ip: data.receiverAccount.id,
+  //     password: data.receiverAccount.password,
+  //   });
+  // }
   const webview = new WebviewWindow("1", {
     url: "#/screenOne",
   });
