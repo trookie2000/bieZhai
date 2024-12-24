@@ -133,7 +133,7 @@ const closeRemoteDesktop = async () => {
 
 // 初始化 WebSocket 连接
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://10.134.147.78:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://192.168.1.10:8081/conn/${data.account.id}`);
 
   ws.onopen = (e: Event) => {
     // 向服务器发送心跳消息
@@ -146,6 +146,18 @@ const initWebSocket = () => {
         msg: "",
       });
     }, 1000 * 60);
+    setInterval(() => {
+      pc.getStats(null).then(stats => {
+        stats.forEach(report => {
+          if (report.type === 'candidate-pair' && report.currentRoundTripTime) {
+            console.log('当前RTT:', report.currentRoundTripTime * 1000, '毫秒'); // 转换为毫秒显示
+          }
+          if (report.type === 'outbound-rtp' && report.jitter) {
+            console.log('网络抖动（Jitter）:', report.jitter * 1000, '毫秒');
+          }
+        });
+      });
+    }, 1000);
   };
 
   ws.onmessage = async (e: MessageEvent) => {
@@ -564,7 +576,7 @@ const sendMouseEvent = (
   const desktopWidth = remoteDesktopDpi.width;
   const desktopHeight = remoteDesktopDpi.height;
 
-  console.log(remoteDesktopDpi);
+  // console.log(remoteDesktopDpi);
 
   // 计算鼠标相对于视频元素的位置
   const xRatio = desktopWidth / videoElement.offsetWidth;
@@ -572,8 +584,8 @@ const sendMouseEvent = (
   const x = Math.round(e.offsetX * xRatio) + remoteDesktopDpi.left;
   const y = Math.round(e.offsetY * yRatio) + remoteDesktopDpi.top;
 
-  console.log(x);
-  console.log(y);
+  // console.log(x);
+  // console.log(y);
 
   // 计算鼠标移动的速度
   const now = performance.now();
@@ -617,7 +629,7 @@ const mouseType = (mouseStatus: MouseStatus, button: number) => {
   return type;
 };
 
-const videoElements = ref<any[]>([]);
+const videoElements = ref<HTMLVideoElement[]>([]);
 
 // 发送消息给服务器
 const sendToServer = (msg: Record<string, any>) => {
@@ -765,11 +777,13 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
         v-show="activeVideoIndex === index">
         <div class="video-container">
           <video class="video" ref="videoElements" :srcObject="video.stream"
-            @mousedown="(e) => mouseDown(e, ($refs.videoElements as any[])[index])"
-            @mouseup="(e) => mouseUp(e, ($refs.videoElements as any[])[index])"
-            @mousemove="(e) => mouseMove(e, ($refs.videoElements as any[])[index])"
-            @wheel="(e) => wheel(e, ($refs.videoElements as any[])[index])" @contextmenu.prevent="(e) => rightClick(e, ($refs.videoElements as any[])[index])
-          " x5-video-player-type="h5-page" autoplay controls></video>
+          @mousedown="(e) => mouseDown(e, (videoElements as HTMLVideoElement[])[index])"
+          @mouseup="(e) => mouseUp(e, (videoElements as HTMLVideoElement[])[index])"
+          @mousemove="(e) => mouseMove(e, (videoElements as HTMLVideoElement[])[index])"
+          @wheel="(e) => wheel(e, (videoElements as HTMLVideoElement[])[index])"
+          @contextmenu.prevent="(e) => rightClick(e, (videoElements as HTMLVideoElement[])[index])"
+          x5-video-player-type="h5-page" autoplay controls>
+        </video>
         </div>
       </div>
     </div>
@@ -937,6 +951,7 @@ video {
   color: #ecf0f1;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
+
 .icon {
   margin-right: 10px;
 }
