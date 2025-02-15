@@ -29,7 +29,7 @@ import {
   handleWindowTop,
 } from "../common/InputEvent";
 
-// 用于存储响应式数据的对象
+// 用于存储响应式数据的对象1
 const data = reactive({
   account: {
     id: "",
