@@ -1,3 +1,4 @@
+<!-- screen.vue -->
 <script setup lang="ts">
 import {
   ref,
@@ -12,10 +13,8 @@ import {
 } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
 import { confirm } from "@tauri-apps/api/dialog";
-import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
-import {
-  handleGetTopWindowInfo,
-} from "../common/InputEvent";
+import { appWindow } from "@tauri-apps/api/window";
+import { handleGetTopWindowInfo } from "../common/InputEvent";
 import {
   MouseStatus,
   WheelStatus,
@@ -26,10 +25,31 @@ import {
 import {
   handleKeyboardEvent,
   handleMouseEvent,
-  handleWindowTop,
 } from "../common/InputEvent";
 
-// 用于存储响应式数据的对象1
+// ====================== 1. 定义连接类型与全局变量 ======================
+interface Connection {
+  remoteId: string;
+  pc: RTCPeerConnection;
+  dc: RTCDataChannel | null;
+  remoteDesktopDpi: {
+    width?: number;
+    height?: number;
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
+  };
+  clearWindowInfoInterval?: number;
+  lastMouseX?: number;
+  lastMouseY?: number;
+  lastTimestamp?: number;
+}
+
+// 统一管理所有远程连接
+const connections: Record<string, Connection> = reactive({});
+
+// 用于存储响应式数据的对象
 const data = reactive({
   account: {
     id: "",
@@ -40,26 +60,44 @@ const data = reactive({
     password: "",
   },
   isShowRemoteDesktop: false,
-  isConnecting: false, //连接状态
-  clearWindowInfoInterval: null as (() => void) | null, //s
+  isConnecting: false,
 });
 
-// WebSocket 连接和RTC其他变量
+// WebSocket
 let ws: WebSocket;
-let pc: RTCPeerConnection;
-let dc: RTCDataChannel;
+// 存储本地桌面流（如果需要）
 let webcamStream: MediaStream;
 let webcamStreamArr: MediaStream[] = [];
-//分辨率
-let remoteDesktopDpi: Record<string, any>;
+
+// 关闭窗口监听时的 unlisten
 let unlisten: Function | null = null;
-// 在组件挂载之前执行的异步操作
+
+// 定义视频对象接口
+interface Video {
+  id: string;
+  stream: MediaStream;
+  receiverAccount: {
+    id: string;
+    password: string;
+  };
+  name: string;
+
+  width?: number;
+  height?: number;
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+}
+// ====================== 2. 生命周期钩子 ======================
 onBeforeMount(async () => {
+  // 获取本地 ID、密码
   data.account = await invoke("generate_account");
   initWebSocket();
 });
+
 onMounted(() => {
-  remoteDesktop(); // 在组件挂载时调用 remoteDesktop 方法
+  remoteDesktop();
   appWindow
     .onCloseRequested(async (event) => {
       event.preventDefault();
@@ -69,107 +107,60 @@ onMounted(() => {
       unlisten = unlistenFn;
     });
 });
-interface Video {
-  id: string;
-  stream: any;
-  receiverAccount: {
-    id: string;
-    password: string;
-  };
-  name: string;
-}
 
 onBeforeUnmount(() => {
   document.removeEventListener("fullscreenchange", handleFullscreenChange);
 });
+
 onUnmounted(() => {
   if (unlisten) {
     unlisten();
   }
 });
-const activeDeviceId = ref<string | null>(null);
 
-const groupedVideos = computed((): Record<string, Video[]> => {
-  const groups: Record<string, Video[]> = {};
-  videos.forEach((video: Video) => {
-    const deviceId = video.receiverAccount.id;
-    if (!groups[deviceId]) {
-      groups[deviceId] = [];
-    }
-    groups[deviceId].push(video);
-  });
-  return groups;
-});
-
-
-const toggleDevice = (deviceId: string) => {
-  activeDeviceId.value = activeDeviceId.value === deviceId ? null : deviceId;
-};
-// 关闭远程桌面
-const closeRemoteDesktop = async () => {
-  const confirmed = await confirm("确认结束远程控制？", "提示");
-  if (confirmed) {
-    appWindow.setFullscreen(false);
-    data.isShowRemoteDesktop = false;
-    appWindow.close();
-
-    // 停止并移除所有的视频流
-    webcamStreamArr.forEach((stream) => {
-      stream.getTracks().forEach((track) => {
-        track.stop();
-      });
-    });
-    webcamStreamArr = []; // 清空video数组
-    close();
-    sendToServer({
-      msg_type: MessageType.STOP_SHARING,
-      receiver: data.receiverAccount.id,
-      msg: data.receiverAccount.password,
-      sender: data.account.id,
-    });
-  }
-};
-/********************************* connect *************************************/
-
-// 初始化 WebSocket 连接
+// ====================== 3. WebSocket 相关 ======================
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://172.30.176.1:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://192.168.0.124:8081/conn/${data.account.id}`);
 
-  ws.onopen = (e: Event) => {
-    // 向服务器发送心跳消息
+  ws.onopen = () => {
+    // 发送心跳
     setInterval(() => {
       sendToServer({
         msg_type: "heartbeat",
         receiver: "",
         sender: "",
-        // videoId:"",
         msg: "",
       });
     }, 1000 * 60);
+
+    // 每秒获取所有连接的统计信息
     setInterval(() => {
-      pc.getStats(null).then(stats => {
-        stats.forEach(report => {
-          if (report.type === 'candidate-pair' && report.currentRoundTripTime) {
-            console.log('当前RTT:', report.currentRoundTripTime * 1000, '毫秒'); // 转换为毫秒显示
-          }
-          if (report.type === 'outbound-rtp' && report.jitter) {
-            console.log('网络抖动（Jitter）:', report.jitter * 1000, '毫秒');
-          }
+      for (const remoteId in connections) {
+        const conn = connections[remoteId];
+        conn.pc.getStats(null).then((stats) => {
+          stats.forEach((report) => {
+            if (report.type === "candidate-pair" && report.currentRoundTripTime) {
+              console.log(`[${remoteId}] 当前RTT:`, report.currentRoundTripTime * 1000, "毫秒");
+            }
+            if (report.type === "outbound-rtp" && report.jitter) {
+              console.log(`[${remoteId}] 网络抖动（Jitter）:`, report.jitter * 1000, "毫秒");
+            }
+          });
         });
-      });
+      }
     }, 1000);
   };
 
   ws.onmessage = async (e: MessageEvent) => {
     const msg: Record<string, any> = JSON.parse(e.data);
     switch (msg.msg_type) {
-      case MessageType.VIDEO_OFFER: // 视频通话邀请
+      case MessageType.VIDEO_OFFER:
         handleVideoOfferMsg(msg);
         break;
-      case MessageType.VIDEO_ANSWER: // 对方已接受邀请
+      case MessageType.VIDEO_ANSWER:
         handleVideoAnswerMsg(msg);
         break;
-      case MessageType.NEW_ICE_CANDIDATE: // 收到新的 ICE 候选项
+      case MessageType.NEW_ICE_CANDIDATE:
         handleNewICECandidateMsg(msg);
         break;
       case MessageType.REMOTE_DESKTOP:
@@ -184,236 +175,173 @@ const initWebSocket = () => {
   ws.onerror = (e: Event) => {
     console.log("WebSocket 连接错误:", e);
   };
-
 };
-//当共享方关闭漂浮栏中的按钮后通知远控方video关闭
+
+// 当共享方关闭按钮后，远控方关闭对应 video
 function closeVideoByMacAddress(msg: Record<string, any>) {
   const id = JSON.parse(msg.msg).id;
   const video = videos.find((item: any) => {
     return item.stream.id == id;
   });
-
-  console.log(videos);
-
-  closeVideo(video);
+  if (video) {
+    closeVideo(video);
+  }
 }
 
-// 处理视频邀请消息
+// ====================== 4. WebRTC 处理函数 ======================
+// 处理视频邀请
 const handleVideoOfferMsg = async (msg: Record<string, any>) => {
+  // sender 作为远程 ID
   data.receiverAccount.id = msg.sender;
-
-  await initRTCPeerConnection();
+  // 如果不存在连接，则创建
+  if (!connections[msg.sender]) {
+    connections[msg.sender] = createConnection(msg.sender);
+  }
+  const connection = connections[msg.sender];
 
   const desc = new RTCSessionDescription(JSON.parse(msg.msg));
-  await pc.setRemoteDescription(desc);
+  await connection.pc.setRemoteDescription(desc);
 
-  await pc.setLocalDescription(await pc.createAnswer());
+  const answer = await connection.pc.createAnswer();
+  await connection.pc.setLocalDescription(answer);
+
   sendToServer({
     msg_type: MessageType.VIDEO_ANSWER,
-    receiver: data.receiverAccount.id,
-    msg: JSON.stringify(pc.localDescription),
+    receiver: msg.sender,
+    msg: JSON.stringify(connection.pc.localDescription),
     sender: data.account.id,
   });
 };
 
-// 处理视频回应消息
+// 处理对方的 ANSWER
 const handleVideoAnswerMsg = async (msg: Record<string, any>) => {
+  const connection = connections[msg.sender];
+  if (!connection) {
+    console.error("连接不存在，无法处理 VIDEO_ANSWER");
+    return;
+  }
   const desc = new RTCSessionDescription(JSON.parse(msg.msg));
-  await pc.setRemoteDescription(desc).catch(reportError);
+  await connection.pc.setRemoteDescription(desc).catch(reportError);
 };
 
-// 处理新的 ICE 候选项消息
+// 处理新的 ICE
 const handleNewICECandidateMsg = async (msg: Record<string, any>) => {
+  const connection = connections[msg.sender];
+  if (!connection) {
+    console.error("连接不存在，无法处理 ICE");
+    return;
+  }
   const candidate = new RTCIceCandidate(JSON.parse(msg.msg));
   try {
-    await pc.addIceCandidate(candidate);
+    await connection.pc.addIceCandidate(candidate);
   } catch (err) {
     reportError(err);
   }
 };
 
-// 处理远程桌面请求消息
+// 处理远程桌面请求
 const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
   try {
-    if (msg.msg != data.account.password) {
+    if (msg.msg !== data.account.password) {
       console.log("密码错误！");
       return;
     }
-
     data.receiverAccount.id = msg.sender;
 
-    await initRTCPeerConnection();
+    // 若无连接则创建
+    if (!connections[msg.sender]) {
+      connections[msg.sender] = createConnection(msg.sender);
+    }
+    const connection = connections[msg.sender];
 
-    initRTCDataChannel();
+    // 主动创建数据通道
+    initRTCDataChannel(connection);
 
     // 获取本地桌面流
     webcamStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: false,
     });
+    webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
+      connection.pc.addTrack(track, webcamStream)
+    );
 
-    webcamStream
-      .getTracks()
-      .forEach((track: MediaStreamTrack) => pc.addTrack(track, webcamStream));
-
-    sendOffer();
+    // 发起 Offer
+    sendOffer(connection);
   } catch (error) {
     console.error("处理远程桌面请求时出错:", error);
-    // 在发生错误时需要重置连接状态
     data.isConnecting = false;
   }
 };
-// 初始化 RTCPeerConnections
-const initRTCPeerConnection = () => {
-  const iceServer: object = {
+
+// ====================== 5. 创建 RTCPeerConnection ======================
+function createConnection(remoteId: string): Connection {
+  const iceServer = {
     iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
       {
-        url: "stun:stun.l.google.com:19302",
-      },
-      {
-        url: "turn:numb.viagenie.ca",
+        urls: "turn:numb.viagenie.ca",
         username: "webrtc@live.com",
         credential: "muazkh",
       },
     ],
   };
 
-  pc = new RTCPeerConnection(iceServer);
+  const pc = new RTCPeerConnection(iceServer);
+  const connection: Connection = {
+    remoteId,
+    pc,
+    dc: null,
+    remoteDesktopDpi: {},
+    lastMouseX: 0,
+    lastMouseY: 0,
+    lastTimestamp: performance.now(),
+  };
 
-  pc.onicecandidate = handleICECandidateEvent;
-  pc.oniceconnectionstatechange = handleICEConnectionStateChangeEvent;
-  pc.onicegatheringstatechange = handleICEGatheringStateChangeEvent;
-  pc.onsignalingstatechange = handleSignalingStateChangeEvent;
-  pc.ontrack = handleTrackEvent;
-  pc.ondatachannel = handleDataChannel;
-};
-
-// 处理 ICE 候选项事件
-const handleICECandidateEvent = (event: RTCPeerConnectionIceEvent) => {
-  if (event.candidate) {
-    sendToServer({
-      msg_type: MessageType.NEW_ICE_CANDIDATE,
-      receiver: data.receiverAccount.id,
-      msg: JSON.stringify(event.candidate),
-      sender: data.account.id,
-    });
-  }
-};
-
-// 处理 ICE 连接状态变化事件
-const handleICEConnectionStateChangeEvent = (event: Event) => {
-  console.log("*** ICE 连接状态变为" + pc.iceConnectionState);
-};
-
-// 处理 ICE 聚集状态变化事件
-const handleICEGatheringStateChangeEvent = (event: Event) => {
-  console.log("*** ICE 聚集状态变为" + pc.iceGatheringState);
-};
-
-// 处理 WebRTC 信令状态变化事件
-const handleSignalingStateChangeEvent = (event: Event) => {
-  console.log("*** WebRTC 信令状态变为: " + pc.signalingState);
-};
-
-// 获取数据流事件处理
-// 处理新视频流事件
-const handleTrackEvent = (event: any) => {
-  console.log(event.streams);
-
-  const stream = event.streams[0];
-  addVideo(stream);
-
-  // 使用 nextTick 来确保 DOM 更新
-  nextTick(() => {
-    const elems = videoElements.value; // 确保你有正确的 ref 指向视频元素数组
-    const elem: any = elems[elems.length - 1];
-    if (elem) {
-      elem.srcObject = stream;
-    } else {
-      console.error("Video element not found");
-    }
-
-    document.onkeydown = (e: KeyboardEvent) => {
-      sendToClient({
-        type: InputEventType.KEY_EVENT,
-        data: {
-          eventType: KeyboardStatus.MOUSE_DOWN,
-          key: e.key,
-        },
+  // ICE
+  pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
+    if (event.candidate) {
+      sendToServer({
+        msg_type: MessageType.NEW_ICE_CANDIDATE,
+        receiver: remoteId,
+        msg: JSON.stringify(event.candidate),
+        sender: data.account.id,
       });
-    };
-
-    document.onkeyup = (e: KeyboardEvent) => {
-      sendToClient({
-        type: InputEventType.KEY_EVENT,
-        data: {
-          eventType: KeyboardStatus.MOUSE_UP,
-          key: e.key,
-        },
-      });
-    };
-  });
-};
-
-// 数据通道事件处理
-const handleDataChannel = (e: RTCDataChannelEvent) => {
-  data.isConnecting = false;
-  dc = e.channel;
-  dc.onopen = (e: Event) => {
-    console.log("数据通道已打开");
-  };
-
-  dc.onmessage = (event: MessageEvent) => {
-    const { id, name, width, height, left, right, top, bottom } = JSON.parse(
-      event.data
-    );
-
-
-    //窗体位置发生变化的应对
-    const video = videos.find((v: any) => v.stream.id == id);
-    if (!video.name) {
-      video.name = name;
     }
-    video.streamId = id;
-    video.width = width;
-    video.height = height;
-    video.left = left;
-    video.right = right;
-    video.top = top;
-    video.bottom = bottom;
-    remoteDesktopDpi = {
-      width,
-      height,
-      left,
-      right,
-      top,
-      bottom,
-    };
   };
 
-  dc.onclose = (e: Event) => {
-    console.log("数据通道已关闭");
+  // ICE 状态变化
+  pc.oniceconnectionstatechange = () => {
+    console.log(`*** ICE(${remoteId}) state: ${pc.iceConnectionState}`);
   };
 
-  console.log("数据通道:", dc);
-};
+  // Track 事件
+  pc.ontrack = (event: RTCTrackEvent) => {
+    const stream = event.streams[0];
+    addVideo(stream, remoteId);
+  };
 
-// 初始化 WebRTC 数据通道
-const initRTCDataChannel = () => {
-  dc = pc.createDataChannel("my channel", {
-    ordered: true,
-  });
+  // 当对方创建数据通道
+  pc.ondatachannel = (e: RTCDataChannelEvent) => {
+    connection.dc = e.channel;
+    handleDataChannel(e, connection);
+  };
 
-  //计算分辨率，鼠标属于哪个位置
-  dc.onopen = async (e: Event) => {
+  return connection;
+}
+
+// ====================== 6. DataChannel 处理 ======================
+function initRTCDataChannel(connection: Connection) {
+  connection.dc = connection.pc.createDataChannel("my channel", { ordered: true });
+
+  connection.dc.onopen = async () => {
     data.isConnecting = true;
-    console.log("数据通道已打开");
+    console.log(`数据通道(${connection.remoteId})已打开`);
 
+    // 定义发送窗口信息的函数
     const sendWindowInfo = async () => {
       const windInfo: any = await handleGetTopWindowInfo();
-
-      let w;
-      let h;
+      let w, h;
       if (windInfo.name.includes("正在共享你的屏幕")) {
         w = window.screen.width;
         h = window.screen.height;
@@ -421,12 +349,10 @@ const initRTCDataChannel = () => {
         w = windInfo.width;
         h = windInfo.height;
       }
-
-      console.log(webcamStreamArr[webcamStreamArr.length - 1]);
-
-      dc.send(
+      // 发送给对端
+      connection.dc?.send(
         JSON.stringify({
-          id: webcamStreamArr[webcamStreamArr.length - 1].id,
+          id: webcamStream ? webcamStream.id : "unknown",
           name: windInfo.name,
           width: w * window.devicePixelRatio,
           height: h * window.devicePixelRatio,
@@ -436,40 +362,17 @@ const initRTCDataChannel = () => {
           bottom: windInfo.bottom,
         })
       );
-
-      // 更新 videos 数组中的名称
-      const video = videos.find((v: any) => v.id === webcamStreamArr[webcamStreamArr.length - 1].id);
-      if (video) {
-        // video.name = windInfo.name;
-      }
-
-      console.log("数据通道:", dc);
     };
 
-    // 初次发送窗口信息
+    // 初次发送
     await sendWindowInfo();
+    // 每隔1秒发送
+    const intervalId = setInterval(sendWindowInfo, 1000);
 
-    // 设置定时器定期发送窗口信息
-    const intervalId = setInterval(sendWindowInfo, 1000); // 每隔一秒发送一次窗口信息
-
-    // 清除定时器的方法（可在需要时调用，例如断开连接时）
-    const clearWindowInfoInterval = () => {
-      clearInterval(intervalId);
-    };
-
-    // 将清除定时器的方法存储到 data 对象中
-    data.clearWindowInfoInterval = clearWindowInfoInterval;
   };
 
-  // 示例：在连接断开时清除定时器
-  dc.onclose = (e: Event) => {
-    console.log("数据通道已关闭");
-    if (data.clearWindowInfoInterval) {
-      data.clearWindowInfoInterval();
-    }
-  };
-  dc.onmessage = (event: MessageEvent) => {
-    let msg: Record<string, any> = JSON.parse(event.data);
+  connection.dc.onmessage = (event: MessageEvent) => {
+    const msg = JSON.parse(event.data);
     switch (msg.type) {
       case InputEventType.MOUSE_EVENT:
         handleMouseEvent(msg.data);
@@ -480,175 +383,311 @@ const initRTCDataChannel = () => {
     }
   };
 
-  dc.onclose = (e: Event) => {
-    console.log("数据通道已关闭");
+  connection.dc.onclose = () => {
+    console.log(`数据通道(${connection.remoteId})已关闭`);
+    if (connection.clearWindowInfoInterval) {
+      clearInterval(connection.clearWindowInfoInterval);
+    }
+  };
+}
+
+// 当对方创建数据通道
+function handleDataChannel(e: RTCDataChannelEvent, connection: Connection) {
+  data.isConnecting = false;
+  const dc = e.channel;
+  connection.dc = dc;
+
+  dc.onopen = () => {
+    console.log(`对方创建的数据通道(${connection.remoteId})已打开`);
   };
 
-  console.log("数据通道:", dc);
-};
+  dc.onmessage = (event: MessageEvent) => {
+    // 这里处理对端发送过来的窗口信息、分辨率更新等
+    const { id, name, width, height, left, right, top, bottom } = JSON.parse(event.data);
 
-// 发送共享桌面邀请
-const sendOffer = async () => {
-  const offer = await pc.createOffer();
+    // 找到对应的视频对象更新
+    const video = videos.find((v: any) => v.stream.id === id);
+    if (video) {
+      if (!video.name) {
+        video.name = name;
+      }
+      video.width = width;
+      video.height = height;
+      video.left = left;
+      video.right = right;
+      video.top = top;
+      video.bottom = bottom;
+    }
+    // 同步更新到连接对象里
+    connection.remoteDesktopDpi = { width, height, left, right, top, bottom };
+  };
 
-  await pc.setLocalDescription(offer);
+  dc.onclose = () => {
+    console.log(`对方创建的数据通道(${connection.remoteId})已关闭`);
+  };
+}
+
+// ====================== 7. 发起 Offer ======================
+const sendOffer = async (connection: Connection) => {
+  const offer = await connection.pc.createOffer();
+  await connection.pc.setLocalDescription(offer);
 
   sendToServer({
     msg_type: MessageType.VIDEO_OFFER,
-    receiver: data.receiverAccount.id,
-    msg: JSON.stringify(pc.localDescription),
+    receiver: connection.remoteId,
+    msg: JSON.stringify(connection.pc.localDescription),
     sender: data.account.id,
   });
 };
 
-/********************************* user event *************************************/
+// ====================== 8. 关闭所有连接 ======================
+function closeAllConnections() {
+  for (const remoteId in connections) {
+    const conn = connections[remoteId];
+    // 关闭 RTCPeerConnection
+    conn.pc.close();
+    // 清理定时器
+    if (conn.clearWindowInfoInterval) {
+      clearInterval(conn.clearWindowInfoInterval);
+    }
+  }
+}
 
-// 请求远程桌面
+// ====================== 9. 用户交互逻辑 ======================
 const remoteDesktop = async () => {
   appWindow.setFullscreen(false);
-  // 显示远程桌面面板
   data.isConnecting = true;
   setTimeout(() => {
     data.isShowRemoteDesktop = true;
   }, 0);
 };
 
-const closeVideo = (video: any) => {
-  console.log("Closing video with ID:", videos);
+const closeRemoteDesktop = async () => {
+  const confirmed = await confirm("确认结束远程控制？", "提示");
+  if (confirmed) {
+    appWindow.setFullscreen(false);
+    data.isShowRemoteDesktop = false;
+    // 关闭所有连接
+    closeAllConnections();
 
-  // 从数组中移除该视频对象
-  const index = videos.findIndex((v: any) => v.id === video.id);
+    // 停止并移除所有的视频流
+    webcamStreamArr.forEach((stream) => {
+      stream.getTracks().forEach((track) => track.stop());
+    });
+    webcamStreamArr = [];
+
+    // 发送 STOP_SHARING
+    sendToServer({
+      msg_type: MessageType.STOP_SHARING,
+      receiver: data.receiverAccount.id,
+      msg: data.receiverAccount.password,
+      sender: data.account.id,
+    });
+
+    // 关闭当前窗口
+    appWindow.close();
+  }
+};
+
+// ====================== 10. 视频管理 ======================
+const videos: Video[] = reactive([]);
+const videoElements = ref<HTMLVideoElement[]>([]);
+
+function addVideo(stream: MediaStream, remoteId: string) {
+  // 每条新流都对应一个 Video 对象
+  const videoObj: Video = {
+    id: Date.now().toString(),
+    stream,
+    receiverAccount: {
+      id: remoteId,
+      password: "",
+    },
+    name: "",
+  };
+  videos.push(videoObj);
+}
+
+const closeVideo = (video: Video) => {
+  console.log("Closing video with ID:", video.id);
+
+  const index = videos.findIndex((v) => v.id === video.id);
   if (index !== -1) {
+    // 通知对端关闭
     sendToServer({
       msg_type: MessageType.CLOSE_REMOTE_DESKTOP,
-      receiver: data.receiverAccount.id,
+      receiver: video.receiverAccount.id,
       msg: JSON.stringify({
         password: data.receiverAccount.password,
         id: video.stream.id,
       }),
       sender: data.account.id,
     });
-
     videos.splice(index, 1);
-
-    // 如果关闭的是当前显示的视频，重置activeVideoIndex
     if (activeVideoIndex.value === index) {
       activeVideoIndex.value = null;
     }
   }
 };
 
-
-// 鼠标事件处理改动，传递事件对象和视频元素
-const mouseDown = (e: any, videoElement: any) => {
-  sendMouseEvent(e, videoElement, mouseType(MouseStatus.MOUSE_DOWN, e.button));
+// ====================== 11. 鼠标事件处理 ======================
+const mouseDown = (e: MouseEvent, videoElement: HTMLVideoElement, remoteId: string) => {
+  sendMouseEvent(e, videoElement, mouseType(MouseStatus.MOUSE_DOWN, e.button), remoteId);
 };
-
-const mouseUp = (e: any, videoElement: any) => {
-  sendMouseEvent(e, videoElement, mouseType(MouseStatus.MOUSE_UP, e.button));
+const mouseUp = (e: MouseEvent, videoElement: HTMLVideoElement, remoteId: string) => {
+  sendMouseEvent(e, videoElement, mouseType(MouseStatus.MOUSE_UP, e.button), remoteId);
 };
-
-const mouseMove = (e: any, videoElement: any) => {
-  sendMouseEvent(e, videoElement, MouseStatus.MOUSE_MOVE);
+const mouseMove = (e: MouseEvent, videoElement: HTMLVideoElement, remoteId: string) => {
+  sendMouseEvent(e, videoElement, MouseStatus.MOUSE_MOVE, remoteId);
 };
-
-const wheel = (e: any, videoElement: any) => {
+const wheel = (e: WheelEvent, videoElement: HTMLVideoElement, remoteId: string) => {
   const type = e.deltaY > 0 ? WheelStatus.WHEEL_DOWN : WheelStatus.WHEEL_UP;
-  sendMouseEvent(e, videoElement, type);
+  sendMouseEvent(e, videoElement, type, remoteId);
+};
+const rightClick = (e: MouseEvent, videoElement: HTMLVideoElement, remoteId: string) => {
+  sendMouseEvent(e, videoElement, MouseStatus.RIGHT_CLICK, remoteId);
 };
 
-const rightClick = (e: any, videoElement: any) => {
-  sendMouseEvent(e, videoElement, MouseStatus.RIGHT_CLICK);
-};
-
-// 更新后的 sendMouseEvent 函数
+// 如果想每个连接单独计算鼠标速度，可把这几个全局变量也放进 Connection 里
 let lastMouseX = 0;
 let lastMouseY = 0;
-let lastTimestamp = 0;
-const sendMouseEvent = (
+let lastTimestamp = performance.now();
+
+function sendMouseEvent(
   e: MouseEvent,
   videoElement: HTMLVideoElement,
-  eventType: string
-) => {
-  if (!videoElement) return;
+  eventType: string,
+  remoteId: string
+) {
+  const connection = connections[remoteId];
+  if (!connection || !connection.remoteDesktopDpi) return;
 
-  // 获取远程桌面的实际尺寸
-  const desktopWidth = remoteDesktopDpi.width;
-  const desktopHeight = remoteDesktopDpi.height;
+  const { width = 0, height = 0, left = 0, top = 0 } = connection.remoteDesktopDpi;
+  if (!videoElement.offsetWidth || !videoElement.offsetHeight) return;
 
-  // console.log(remoteDesktopDpi);
+  const xRatio = width / videoElement.offsetWidth;
+  const yRatio = height / videoElement.offsetHeight;
 
-  // 计算鼠标相对于视频元素的位置
-  const xRatio = desktopWidth / videoElement.offsetWidth;
-  const yRatio = desktopHeight / videoElement.offsetHeight;
-  const x = Math.round(e.offsetX * xRatio) + remoteDesktopDpi.left;
-  const y = Math.round(e.offsetY * yRatio) + remoteDesktopDpi.top;
+  const x = Math.round(e.offsetX * xRatio) + left;
+  const y = Math.round(e.offsetY * yRatio) + top;
 
-  // console.log(x);
-  // console.log(y);
-
-  // 计算鼠标移动的速度
   const now = performance.now();
   const deltaTime = now - lastTimestamp;
   const deltaX = x - lastMouseX;
   const deltaY = y - lastMouseY;
-  const speedX = deltaX / deltaTime;
-  const speedY = deltaY / deltaTime;
+  const speedX = deltaTime ? deltaX / deltaTime : 0;
+  const speedY = deltaTime ? deltaY / deltaTime : 0;
 
-  // 发送鼠标事件给客户端
-  sendToClient({
+  sendToClient(remoteId, {
     type: InputEventType.MOUSE_EVENT,
-    data: {
-      x: x,
-      y: y,
-      speedX: speedX,
-      speedY: speedY,
-      eventType: eventType,
-    },
+    data: { x, y, speedX, speedY, eventType },
   });
 
-  // 更新上一次鼠标位置和时间戳
   lastMouseX = x;
   lastMouseY = y;
   lastTimestamp = now;
-};
+}
 
-// 获取鼠标事件类型
-const mouseType = (mouseStatus: MouseStatus, button: number) => {
-  let type = "";
+function mouseType(mouseStatus: MouseStatus, button: number) {
   switch (button) {
     case 0:
-      type = "left-" + mouseStatus;
-      break;
+      return "left-" + mouseStatus;
     case 2:
-      type = "right-" + mouseStatus;
-      break;
-    // TODO 更多的按钮
+      return "right-" + mouseStatus;
+    default:
+      return "unknown-" + mouseStatus;
   }
+}
 
-  return type;
+// ====================== 12. 发送消息 ======================
+function sendToServer(msg: Record<string, any>) {
+  ws.send(JSON.stringify(msg));
+}
+
+function sendToClient(remoteId: string, msg: Record<string, any>) {
+  const connection = connections[remoteId];
+  if (connection && connection.dc && connection.dc.readyState === "open") {
+    connection.dc.send(JSON.stringify(msg));
+  }
+}
+
+// ====================== 13. 界面辅助逻辑 ======================
+let activeVideoIndex = ref<number | null>(null);
+
+const setActiveVideo = (index: number) => {
+  activeVideoIndex.value = index;
 };
 
-const videoElements = ref<HTMLVideoElement[]>([]);
-
-// 发送消息给服务器
-const sendToServer = (msg: Record<string, any>) => {
-  let msgJSON = JSON.stringify(msg);
-  ws.send(msgJSON);
+const showVideo = (video: Video) => {
+  activeVideoIndex.value = videos.findIndex((v) => v.id === video.id);
 };
 
-// 发送消息给客户端
-const sendToClient = (msg: Record<string, any>) => {
-  let msgJSON = JSON.stringify(msg);
-  dc.readyState == "open" && dc.send(msgJSON);
+const activeDeviceId = ref<string | null>(null);
+
+const groupedVideos = computed((): Record<string, Video[]> => {
+  const groups: Record<string, Video[]> = {};
+  videos.forEach((video) => {
+    const deviceId = video.receiverAccount.id;
+    if (!groups[deviceId]) {
+      groups[deviceId] = [];
+    }
+    groups[deviceId].push(video);
+  });
+  return groups;
+});
+
+const toggleDevice = (deviceId: string) => {
+  activeDeviceId.value = activeDeviceId.value === deviceId ? null : deviceId;
 };
-const videos: any = reactive<Video[]>([]);
-//
+
+// 设置窗口置顶（示例：更新 connection.remoteDesktopDpi 并通知对端）
+function setWindowTop(video: Video) {
+  const remoteId = video.receiverAccount.id;
+  const connection = connections[remoteId];
+  if (!connection) return;
+
+  // 更新 remoteDesktopDpi
+  connection.remoteDesktopDpi = {
+    width: (video as any).width,
+    height: (video as any).height,
+    left: (video as any).left,
+    right: (video as any).right,
+    top: (video as any).top,
+    bottom: (video as any).bottom,
+  };
+
+  // 发送给客户端
+  sendToClient(remoteId, {
+    type: InputEventType.WINDOW_EVENT,
+    data: {
+      windowTitle: (video.name || "") + "\0",
+    },
+  });
+}
+
+// 全屏切换监测
+const isVideoFullscreen = ref(true);
+document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+function handleFullscreenChange() {
+  isVideoFullscreen.value = document.fullscreenElement !== null;
+  const buttons = document.querySelectorAll(".close-btn");
+  buttons.forEach((button: any) => {
+    if (isVideoFullscreen.value) {
+      button.style.bottom = "20px";
+      button.style.right = "20px";
+    } else {
+      button.style.bottom = "5%";
+      button.style.right = "5%";
+    }
+  });
+}
+
+// 监听 videos 数组变动，给每个 video 标签加事件（可根据需要保留/修改）
 watch(
   videos,
-  (value) => {
-    const videos = document.querySelectorAll("video");
-    videos.forEach((video: any) => {
+  () => {
+    const allVideos = document.querySelectorAll("video");
+    allVideos.forEach((video: any) => {
       const clickHandler = (event: any) => {
         event.preventDefault();
       };
@@ -663,103 +702,56 @@ watch(
       };
       video.addEventListener("click", clickHandler);
       video.addEventListener("keydown", keydownHandler);
-
-      // 保存事件处理函数，以便稍后移除
+      // 保存以便移除
       video.__clickHandler = clickHandler;
       video.__keydownHandler = keydownHandler;
     });
   },
-  {
-    deep: true,
-  }
+  { deep: true }
 );
-videos.forEach((video: any) => {
-  video.removeEventListener("click", video.__clickHandler);
-  video.removeEventListener("keydown", video.__keydownHandler);
-});
 
-let activeVideoIndex = ref<number | null>(null);
-const setActiveVideo = (index: number) => {
-  activeVideoIndex.value = index;
-};
-
-const showVideo = (video: Video) => {
-  activeVideoIndex.value = videos.findIndex((v: Video) => v.id === video.id);
-};
-
-
-const addVideo = (stream: any) => {
-  const videoObj = {
-    id: Date.now().toString(),
-    stream,
-    receiverAccount: { id: data.receiverAccount.id }, // 确保包含 receiverAccount.id
-    name: '',
-  };
-  videos.push(videoObj);
-};
-
-const isVideoFullscreen = ref(true);
-const setWindowTop = (video: any) => {
-  // 保留原来的 video.name
-  const windowTitle = video.name;
-  // console.log("Setting window top with title:", windowTitle);
-
-  // 只更新需要的属性，不修改 video.name
-  remoteDesktopDpi = {
-    width: video.width,
-    height: video.height,
-    left: video.left,
-    right: video.right,
-    top: video.top,
-    bottom: video.bottom,
-  };
-
-  sendToClient({
-    type: InputEventType.WINDOW_EVENT,
-    data: {
-      windowTitle: windowTitle + "\0",
-    },
-  });
-};
-
-
-
-// 监听视频全屏状态变化
-document.addEventListener("fullscreenchange", handleFullscreenChange);
-
-// 处理视频全屏状态变化
-function handleFullscreenChange() {
-  isVideoFullscreen.value = document.fullscreenElement !== null;
-
-  // 更新按钮位置和样式
-  const buttons = document.querySelectorAll(".close-btn");
-  buttons.forEach((button: any) => {
-    if (isVideoFullscreen.value) {
-      button.style.bottom = "20px";
-      button.style.right = "20px";
-    } else {
-      button.style.bottom = "5%";
-      button.style.right = "5%";
-    }
-  });
+// ====================== 14. 通用报错处理 ======================
+function reportError(err: any) {
+  console.error("WebRTC Error:", err);
 }
-
-document.addEventListener("fullscreenchange", handleFullscreenChange);
 </script>
+
 <template>
   <div class="container">
-    <!-- 新增列表部分 -->
+    <!-- 列表 -->
     <div class="video-list">
       <ul>
-        <li v-for="(videos, deviceId) in groupedVideos" :key="deviceId" class="device-item">
+        <li
+          v-for="(videosOfDevice, deviceId) in groupedVideos"
+          :key="deviceId"
+          class="device-item"
+        >
           <div @click="toggleDevice(deviceId)" class="device-name">
             <i class="icon fas fa-desktop"></i>{{ deviceId }}
-            <i :class="['icon', 'fas', activeDeviceId === deviceId ? 'fa-chevron-down' : 'fa-chevron-right']"></i>
+            <i
+              :class="[
+                'icon',
+                'fas',
+                activeDeviceId === deviceId ? 'fa-chevron-down' : 'fa-chevron-right',
+              ]"
+            ></i>
           </div>
           <ul v-show="activeDeviceId === deviceId" class="sub-list">
-            <li v-for="video in videos" :key="video.id" class="video-item">
+            <li
+              v-for="video in videosOfDevice"
+              :key="video.id"
+              class="video-item"
+            >
               <div class="video-item-content">
-                <span @click="() => { showVideo(video); setWindowTop(video); }" class="video-name">
+                <span
+                  @click="
+                    () => {
+                      showVideo(video);
+                      setWindowTop(video);
+                    }
+                  "
+                  class="video-name"
+                >
                   <i class="icon fas fa-video"></i>{{ video.name }}
                 </span>
                 <span @click="closeVideo(video)" class="close-btn">
@@ -772,23 +764,34 @@ document.addEventListener("fullscreenchange", handleFullscreenChange);
       </ul>
     </div>
 
+    <!-- 视频区域 -->
     <div class="video-grid">
-      <div v-for="(video, index) in videos" :key="video.id" class="video-wrapper" :class="{ isTop: video.isTop }"
-        v-show="activeVideoIndex === index">
+      <div
+        v-for="(video, index) in videos"
+        :key="video.id"
+        class="video-wrapper"
+        v-show="activeVideoIndex === index"
+      >
         <div class="video-container">
-          <video class="video" ref="videoElements" :srcObject="video.stream"
-          @mousedown="(e) => mouseDown(e, (videoElements as HTMLVideoElement[])[index])"
-          @mouseup="(e) => mouseUp(e, (videoElements as HTMLVideoElement[])[index])"
-          @mousemove="(e) => mouseMove(e, (videoElements as HTMLVideoElement[])[index])"
-          @wheel="(e) => wheel(e, (videoElements as HTMLVideoElement[])[index])"
-          @contextmenu.prevent="(e) => rightClick(e, (videoElements as HTMLVideoElement[])[index])"
-          x5-video-player-type="h5-page" autoplay controls>
-        </video>
+          <video
+            class="video"
+            ref="videoElements"
+            :srcObject="video.stream"
+            @mousedown="(e) => mouseDown(e, (videoElements as HTMLVideoElement[])[index], video.receiverAccount.id)"
+            @mouseup="(e) => mouseUp(e, (videoElements as HTMLVideoElement[])[index], video.receiverAccount.id)"
+            @mousemove="(e) => mouseMove(e, (videoElements as HTMLVideoElement[])[index], video.receiverAccount.id)"
+            @wheel="(e) => wheel(e, (videoElements as HTMLVideoElement[])[index], video.receiverAccount.id)"
+            @contextmenu.prevent="(e) => rightClick(e, (videoElements as HTMLVideoElement[])[index], video.receiverAccount.id)"
+            x5-video-player-type="h5-page"
+            autoplay
+            controls
+          ></video>
         </div>
       </div>
     </div>
   </div>
 </template>
+
 
 <style lang="less" scoped>
 @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css');

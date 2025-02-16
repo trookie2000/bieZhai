@@ -16,7 +16,9 @@ import {
   handleMouseEvent,
   handleWindowTop,
 } from "../common/InputEvent";
-import  eventBus from '../common/eventBus';  // 引入事件总线
+import eventBus from "../common/eventBus"; // 引入事件总线
+
+// 存储页面所需的响应式数据
 const data = reactive({
   account: {
     id: "",
@@ -26,11 +28,11 @@ const data = reactive({
     id: "",
     password: "",
   },
-  screenChangesignal: 0, //用于远控窗口数量
+  screenChangesignal: 0, // 用于远控窗口数量
   isShowRemoteDesktop: false,
-  isConnecting: false, //连接状态
+  isConnecting: false, // 连接状态
   clearWindowInfoInterval: null as (() => void) | null,
-  deviceList: [] as { ip: string, password: string }[], // List to store devices
+  deviceList: [] as { ip: string; password: string }[], // 设备列表
 });
 
 const isDeviceListOpen = ref(false);
@@ -43,55 +45,223 @@ const removeDevice = (index: number) => {
   data.deviceList.splice(index, 1);
 };
 
-
-// 对象用于引用视频元素，DOM对象s
+// 视频元素引用
 const desktop = ref<HTMLVideoElement>();
 
-// WebSocket 连接和RTC其他变量
+// WebSocket
 let ws: WebSocket;
-let pc: RTCPeerConnection;
-let dc: RTCDataChannel;
-let webcamStreamArr: MediaStream[] = [];
-let remoteDesktopDpi: Record<string, any>;
-let unlisten: Function | null = null;
 
-onBeforeMount(async () => {
-  data.account = await invoke("generate_account");
-  initWebSocket();
-});
+// 为了同时远控多台机器，我们用一个 Map 来维护每个连接（pc/dc/流等）
+type ConnectionInfo = {
+  pc: RTCPeerConnection;
+  dc: RTCDataChannel | null;
+  webcamStreamArr: MediaStream[];
+  remoteDesktopDpi: Record<string, any>;
+};
+const connections = new Map<string, ConnectionInfo>();
 
-onMounted(() => {
-  eventBus.on('addDevice', (deviceIp: any) => {
-  console.log("接收到事件 addDevice设备IP:", deviceIp);
-  if (!data.deviceList.some(device => device.ip === deviceIp)) {
-    data.deviceList.push({
-      ip: deviceIp,
-      password: '',  // 或者填充其他所需的值
-    });
+/** 获取或创建某个远程目标(remoteId)的连接信息 */
+function getOrCreateConnection(remoteId: string): ConnectionInfo {
+  let conn = connections.get(remoteId);
+  if (conn) {
+    return conn;
   }
-  console.log("更新后的设备列表:", data.deviceList);
-});
-  appWindow
-    .onCloseRequested(async (event) => {
-      event.preventDefault();
-      closeRemoteDesktop();
-    })
-    .then((unlistenFn: Function) => {
-      unlisten = unlistenFn;
-    });
-});
 
-onUnmounted(() => {
-  if (unlisten) {
-    unlisten();
+  // 新建 PeerConnection
+  const pc = new RTCPeerConnection({
+    iceServers: [
+      {
+        urls: "stun:stun.l.google.com:19302",
+      },
+      {
+        urls: "turn:numb.viagenie.ca",
+        username: "webrtc@live.com",
+        credential: "muazkh",
+      },
+    ],
+  });
+
+  // 初始化存储结构
+  conn = {
+    pc,
+    dc: null,
+    webcamStreamArr: [],
+    remoteDesktopDpi: {},
+  };
+
+  // 绑定 PC 事件
+  pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
+    if (event.candidate) {
+      // 发送 ICE 给对端
+      sendToServer({
+        msg_type: MessageType.NEW_ICE_CANDIDATE,
+        receiver: remoteId,
+        msg: JSON.stringify(event.candidate),
+        sender: data.account.id,
+      });
+    }
+  };
+
+  pc.oniceconnectionstatechange = (event: Event) => {
+    console.log("*** ICE 连接状态变为 " + pc.iceConnectionState);
+  };
+
+  pc.onicegatheringstatechange = (event: Event) => {
+    console.log("*** ICE 聚集状态变为 " + pc.iceGatheringState);
+  };
+
+  pc.onsignalingstatechange = (event: Event) => {
+    console.log("*** WebRTC 信令状态变为: " + pc.signalingState);
+  };
+
+  // 收到远端的音视频 Track
+  pc.ontrack = (event: RTCTrackEvent) => {
+    // 这里只简单地把画面显示到一个固定的 <video> 上
+    desktop.value!.srcObject = event.streams[0];
+
+    // 键盘事件示例
+    document.onkeydown = (e: KeyboardEvent) => {
+      sendToClient(remoteId, {
+        type: InputEventType.KEY_EVENT,
+        data: {
+          eventType: KeyboardStatus.MOUSE_DOWN,
+          key: e.key,
+        },
+      });
+    };
+
+    document.onkeyup = (e: KeyboardEvent) => {
+      sendToClient(remoteId, {
+        type: InputEventType.KEY_EVENT,
+        data: {
+          eventType: KeyboardStatus.MOUSE_UP,
+          key: e.key,
+        },
+      });
+    };
+  };
+
+  // 对端创建 DataChannel
+  pc.ondatachannel = (e: RTCDataChannelEvent) => {
+    conn!.dc = e.channel;
+    const dc = conn!.dc;
+
+    dc.onopen = () => {
+      console.log("数据通道已打开: remoteId=", remoteId);
+    };
+
+    dc.onmessage = (event: MessageEvent) => {
+      // 这里简单存一下对端发来的 DPI 信息
+      conn!.remoteDesktopDpi = JSON.parse(event.data);
+    };
+
+    dc.onclose = () => {
+      console.log("数据通道已关闭: remoteId=", remoteId);
+    };
+
+    console.log("数据通道:", dc);
+  };
+
+  connections.set(remoteId, conn);
+  return conn;
+}
+
+/** 主动创建 DataChannel（被控端也可 ondatachannel 收到） */
+function createDataChannel(remoteId: string) {
+  const conn = getOrCreateConnection(remoteId);
+  if (conn.dc) {
+    // 已有 dataChannel 就不重复创建
+    return;
   }
-});
+  const pc = conn.pc;
+  const dc = pc.createDataChannel("my channel", { ordered: true });
+  conn.dc = dc;
 
-// 初始化 WebSocket 连接
+  dc.onopen = () => {
+    data.isConnecting = true;
+    console.log("数据通道已打开 for remoteId=", remoteId);
+
+    // 启动定时器，不断发送窗口信息
+    const intervalId = setInterval(async () => {
+      const windInfo: any = await handleGetTopWindowInfo();
+      let w, h;
+      if (windInfo.name.includes("正在共享你的屏幕")) {
+        w = window.screen.width;
+        h = window.screen.height;
+      } else {
+        w = windInfo.width;
+        h = windInfo.height;
+      }
+
+      // 拿到当前最新的共享流
+      const arr = conn.webcamStreamArr;
+      if (arr.length === 0) return;
+
+      // 默认用最后一次共享的流 ID
+      const currentStreamId = arr[arr.length - 1].id;
+      dc.send(
+        JSON.stringify({
+          id: currentStreamId,
+          name: windInfo.name,
+          width: w * window.devicePixelRatio,
+          height: h * window.devicePixelRatio,
+          left: windInfo.left,
+          right: windInfo.right,
+          top: windInfo.top,
+          bottom: windInfo.bottom,
+        })
+      );
+    }, 1000);
+
+    const clearWindowInfoInterval = () => {
+      clearInterval(intervalId);
+    };
+    data.clearWindowInfoInterval = clearWindowInfoInterval;
+  };
+
+  dc.onmessage = (event: MessageEvent) => {
+    const msg: Record<string, any> = JSON.parse(event.data);
+    switch (msg.type) {
+      case InputEventType.MOUSE_EVENT:
+        handleMouseEvent(msg.data);
+        break;
+      case InputEventType.KEY_EVENT:
+        handleKeyboardEvent(msg.data);
+        break;
+      case InputEventType.WINDOW_EVENT:
+        handleWindowTop(msg.data);
+        break;
+    }
+  };
+
+  dc.onclose = () => {
+    data.isConnecting = false;
+    console.log("数据通道已关闭 for remoteId=", remoteId);
+  };
+}
+
+/** 发送 offer 给对端 */
+async function sendOffer(remoteId: string) {
+  const conn = getOrCreateConnection(remoteId);
+  const pc = conn.pc;
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  sendToServer({
+    msg_type: MessageType.VIDEO_OFFER,
+    receiver: remoteId,
+    msg: JSON.stringify(pc.localDescription),
+    sender: data.account.id,
+  });
+}
+
+/** 初始化 WebSocket 连接 */
 const initWebSocket = () => {
-  ws = new WebSocket(`ws://192.168.1.10:8081/conn/${data.account.id}`);
+  ws = new WebSocket(`ws://192.168.0.124:8081/conn/${data.account.id}`);
 
-  ws.onopen = (e: Event) => {
+  ws.onopen = () => {
+    // 定时心跳
     setInterval(() => {
       sendToServer({
         msg_type: "heartbeat",
@@ -128,29 +298,44 @@ const initWebSocket = () => {
   };
 };
 
+/** 收到对方的 VIDEO_OFFER */
 const handleVideoOfferMsg = async (msg: Record<string, any>) => {
-  data.receiverAccount.id = msg.sender;
+  const remoteId = msg.sender;
+  data.receiverAccount.id = remoteId; // 仅用于UI显示
 
-  await initRTCPeerConnection();
+  const conn = getOrCreateConnection(remoteId);
+  const pc = conn.pc;
 
   const desc = new RTCSessionDescription(JSON.parse(msg.msg));
   await pc.setRemoteDescription(desc);
 
-  await pc.setLocalDescription(await pc.createAnswer());
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+
   sendToServer({
     msg_type: MessageType.VIDEO_ANSWER,
-    receiver: data.receiverAccount.id,
-    msg: JSON.stringify(pc.localDescription),
+    receiver: remoteId,
+    msg: JSON.stringify(answer),
     sender: data.account.id,
   });
 };
 
+/** 收到对方的 VIDEO_ANSWER */
 const handleVideoAnswerMsg = async (msg: Record<string, any>) => {
+  const remoteId = msg.sender;
+  const conn = getOrCreateConnection(remoteId);
+  const pc = conn.pc;
+
   const desc = new RTCSessionDescription(JSON.parse(msg.msg));
   await pc.setRemoteDescription(desc).catch(reportError);
 };
 
+/** 收到对方的 ICE_CANDIDATE */
 const handleNewICECandidateMsg = async (msg: Record<string, any>) => {
+  const remoteId = msg.sender;
+  const conn = getOrCreateConnection(remoteId);
+  const pc = conn.pc;
+
   const candidate = new RTCIceCandidate(JSON.parse(msg.msg));
   try {
     await pc.addIceCandidate(candidate);
@@ -159,243 +344,73 @@ const handleNewICECandidateMsg = async (msg: Record<string, any>) => {
   }
 };
 
+/** 收到对方请求 REMOTE_DESKTOP */
 const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
-  // if (msg.msg != data.account.password) {
-  //   console.log("密码错误！");
-  //   return;
-  // }
+  const remoteId = msg.sender;
+  // if (msg.msg != data.account.password) { ... }
 
-  data.receiverAccount.id = msg.sender;
+  data.receiverAccount.id = remoteId; // 用于UI显示
 
-  await initRTCPeerConnection();
-  initRTCDataChannel();
+  // 获取 / 创建 RTCPeerConnection
+  const conn = getOrCreateConnection(remoteId);
+  createDataChannel(remoteId);
 
-  const webcamStream: any = await navigator.mediaDevices.getDisplayMedia({
+  // 采集本地桌面流
+  const webcamStream: MediaStream = await navigator.mediaDevices.getDisplayMedia({
     video: true,
     audio: false,
   });
-  data.screenChangesignal++;
-  webcamStreamArr.push(webcamStream);
 
-  webcamStream.oninactive = (e: any) => {
+  data.screenChangesignal++;
+  conn.webcamStreamArr.push(webcamStream);
+
+  // 监听屏幕流结束
+// 给流中的每条 track 添加 onended 监听
+webcamStream.getTracks().forEach((track) => {
+  track.addEventListener("ended", (e) => {
+    // 在这里处理停止共享逻辑
     data.screenChangesignal--;
     sendToServer({
       msg_type: MessageType.STOP_SHARING,
-      receiver: data.receiverAccount.id,
+      receiver: remoteId,
       msg: JSON.stringify({
-        id: e.currentTarget.id,
+        id: webcamStream.id, // 或者 track.id
       }),
       sender: data.account.id,
     });
-    if (data.screenChangesignal == 0) {
+    if (data.screenChangesignal === 0) {
       data.isConnecting = false;
     }
-  };
+  });
+});
 
-  webcamStream.getTracks().forEach((track: MediaStreamTrack) => {
-    pc.addTrack(track, webcamStream);
+  // 把每条 track 加到 PeerConnection
+  webcamStream.getTracks().forEach((track) => {
+    conn.pc.addTrack(track, webcamStream);
   });
 
-  sendOffer();
+  // 发送 offer
+  await sendOffer(remoteId);
 };
 
-const initRTCPeerConnection = () => {
-  const iceServer: object = {
-    iceServers: [
-      {
-        url: "stun:stun.l.google.com:19302",
-      },
-      {
-        url: "turn:numb.viagenie.ca",
-        username: "webrtc@live.com",
-        credential: "muazkh",
-      },
-    ],
-  };
-
-  pc = new RTCPeerConnection(iceServer);
-
-  pc.onicecandidate = handleICECandidateEvent;
-  pc.oniceconnectionstatechange = handleICEConnectionStateChangeEvent;
-  pc.onicegatheringstatechange = handleICEGatheringStateChangeEvent;
-  pc.onsignalingstatechange = handleSignalingStateChangeEvent;
-  pc.ontrack = handleTrackEvent;
-  pc.ondatachannel = handleDataChannel;
-};
-
-const handleICECandidateEvent = (event: RTCPeerConnectionIceEvent) => {
-  if (event.candidate) {
-    sendToServer({
-      msg_type: MessageType.NEW_ICE_CANDIDATE,
-      receiver: data.receiverAccount.id,
-      msg: JSON.stringify(event.candidate),
-      sender: data.account.id,
-    });
-  }
-};
-
-const handleICEConnectionStateChangeEvent = (event: Event) => {
-  console.log("*** ICE 连接状态变为" + pc.iceConnectionState);
-};
-
-const handleICEGatheringStateChangeEvent = (event: Event) => {
-  console.log("*** ICE 聚集状态变为" + pc.iceGatheringState);
-};
-
-const handleSignalingStateChangeEvent = (event: Event) => {
-  console.log("*** WebRTC 信令状态变为: " + pc.signalingState);
-};
-
-const handleTrackEvent = (event: RTCTrackEvent) => {
-  desktop.value!.srcObject = event.streams[0];
-
-  document.onkeydown = (e: KeyboardEvent) => {
-    sendToClient({
-      type: InputEventType.KEY_EVENT,
-      data: {
-        eventType: KeyboardStatus.MOUSE_DOWN,
-        key: e.key,
-      },
-    });
-  };
-
-  document.onkeyup = (e: KeyboardEvent) => {
-    sendToClient({
-      type: InputEventType.KEY_EVENT,
-      data: {
-        eventType: KeyboardStatus.MOUSE_UP,
-        key: e.key,
-      },
-    });
-  };
-};
-
-const handleDataChannel = (e: RTCDataChannelEvent) => {
-  dc = e.channel;
-  dc.onopen = (e: Event) => {
-    console.log("数据通道已打开");
-  };
-
-  dc.onmessage = (event: MessageEvent) => {
-    remoteDesktopDpi = JSON.parse(event.data);
-  };
-
-  dc.onclose = (e: Event) => {
-    console.log("数据通道已关闭");
-  };
-
-  console.log("数据通道:", dc);
-};
-
-const initRTCDataChannel = () => {
-  dc = pc.createDataChannel("my channel", {
-    ordered: true,
-  });
-
-  dc.onopen = async (e: Event) => {
-    data.isConnecting = true;
-    console.log("数据通道已打开");
-
-    const sendWindowInfo = async () => {
-      const windInfo: any = await handleGetTopWindowInfo();
-
-      let w;
-      let h;
-      if (windInfo.name.includes("正在共享你的屏幕")) {
-        w = window.screen.width;
-        h = window.screen.height;
-      } else {
-        w = windInfo.width;
-        h = windInfo.height;
-      }
-
-      dc.send(
-        JSON.stringify({
-          id: webcamStreamArr[webcamStreamArr.length - 1].id,
-          name: windInfo.name,
-          width: w * window.devicePixelRatio,
-          height: h * window.devicePixelRatio,
-          left: windInfo.left,
-          right: windInfo.right,
-          top: windInfo.top,
-          bottom: windInfo.bottom,
-        })
-      );
-    };
-
-    await sendWindowInfo();
-
-    const intervalId = setInterval(sendWindowInfo, 1000);
-
-    const clearWindowInfoInterval = () => {
-      clearInterval(intervalId);
-    };
-
-    data.clearWindowInfoInterval = clearWindowInfoInterval;
-  };
-
-  dc.onmessage = (event: MessageEvent) => {
-    let msg: Record<string, any> = JSON.parse(event.data);
-    switch (msg.type) {
-      case InputEventType.MOUSE_EVENT:
-        handleMouseEvent(msg.data);
-        break;
-      case InputEventType.KEY_EVENT:
-        handleKeyboardEvent(msg.data);
-        break;
-      case InputEventType.WINDOW_EVENT:
-        handleWindowTop(msg.data);
-        break;
-    }
-  };
-
-  dc.onclose = (e: Event) => {
-    data.isConnecting = false;
-    console.log("数据通道已关闭");
-  };
-
-  console.log("数据通道:", dc);
-};
-
-const sendOffer = async () => {
-  const offer = await pc.createOffer();
-
-  await pc.setLocalDescription(offer);
-
-  sendToServer({
-    msg_type: MessageType.VIDEO_OFFER,
-    receiver: data.receiverAccount.id,
-    msg: JSON.stringify(pc.localDescription),
-    sender: data.account.id,
-  });
-};
-
-
-// 请求远程桌面
+/** 请求远程桌面：主动方 */
 const remoteDesktop = async () => {
   if (!data.receiverAccount.id) {
     alert("请输入IP地址");
     return;
   }
-  eventBus.emit('event');
-  // 判断是否已存在相同的IP
-  // const exists = data.deviceList.some(device => device.ip === data.receiverAccount.id);
-  // if (!exists) {
-  //   data.deviceList.push({
-  //     ip: data.receiverAccount.id,
-  //     password: data.receiverAccount.password,
-  //   });
-  // }
+  eventBus.emit("event");
+
+  // 打开一个新的 webview（如果你有此需求）
   const webview = new WebviewWindow("1", {
     url: "#/screenOne",
   });
-
-  webview.once("tauri://created", function () { });
-
-  webview.once("tauri://error", function (e) {
+  webview.once("tauri://created", () => {});
+  webview.once("tauri://error", (e) => {
     console.error("Webview error:", e);
   });
 
+  // 通知对方，想要发起远程桌面
   sendToServer({
     msg_type: MessageType.REMOTE_DESKTOP,
     receiver: data.receiverAccount.id,
@@ -404,7 +419,7 @@ const remoteDesktop = async () => {
   });
 };
 
-// 关闭远程桌面
+/** 关闭远程桌面 */
 const closeRemoteDesktop = async () => {
   const confirmed = await confirm("确认结束被控？", "提示");
   if (confirmed) {
@@ -412,13 +427,17 @@ const closeRemoteDesktop = async () => {
     data.isShowRemoteDesktop = false;
     appWindow.close();
 
-    webcamStreamArr.forEach((stream) => {
-      stream.getTracks().forEach((track) => {
-        track.stop();
+    // 停止所有共享流
+    connections.forEach((conn, remoteId) => {
+      conn.webcamStreamArr.forEach((stream) => {
+        stream.getTracks().forEach((track) => track.stop());
       });
+      conn.webcamStreamArr = [];
     });
-    webcamStreamArr = [];
-    close();
+
+    close(); // 彻底清理
+
+    // 通知对端停止共享
     sendToServer({
       msg_type: MessageType.STOP_SHARING,
       receiver: data.receiverAccount.id,
@@ -428,34 +447,89 @@ const closeRemoteDesktop = async () => {
   }
 };
 
+/** 关闭共享流/连接 */
 const close = (msg?: Record<string, any>) => {
-  const id = JSON.parse(msg?.msg).id;
   if (msg) {
-    const stream = webcamStreamArr.find((item) => item.id == id);
-    stream?.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+    // 只关闭特定流
+    const id = JSON.parse(msg.msg).id;
+    // 找到对应连接
+    const remoteId = msg.sender;
+    const conn = connections.get(remoteId);
+    if (!conn) return;
+
+    const targetStream = conn.webcamStreamArr.find((s) => s.id === id);
+    targetStream?.getTracks().forEach((track) => track.stop());
   } else {
-    webcamStreamArr.forEach((stream) => {
-      stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+    // 全部关闭
+    connections.forEach((conn) => {
+      conn.webcamStreamArr.forEach((stream) => {
+        stream.getTracks().forEach((track) => track.stop());
+      });
+      conn.webcamStreamArr = [];
     });
   }
 };
 
+/** 发送消息给服务器 */
 const sendToServer = (msg: Record<string, any>) => {
-  let msgJSON = JSON.stringify(msg);
+  if (!ws) return;
+  const msgJSON = JSON.stringify(msg);
   ws.send(msgJSON);
 };
 
-const sendToClient = (msg: Record<string, any>) => {
-  let msgJSON = JSON.stringify(msg);
-  dc.readyState == "open" && dc.send(msgJSON);
-};
+/** 发送消息给指定 remoteId 的对端 DataChannel */
+function sendToClient(remoteId: string, msg: Record<string, any>) {
+  const conn = connections.get(remoteId);
+  if (!conn || !conn.dc) return;
+  if (conn.dc.readyState === "open") {
+    conn.dc.send(JSON.stringify(msg));
+  }
+}
 
-const selectDevice = (device:{ip:string}) => {
+/** 选择某个设备 */
+const selectDevice = (device: { ip: string }) => {
   console.log(`Selected device IP: ${device.ip}`);
   data.receiverAccount.id = device.ip;
-  // data.receiverAccount.password = device.password;
 };
+
+/** 错误处理 */
+function reportError(err: any) {
+  console.error("WebRTC Error:", err);
+}
+
+/** 组件生命周期 */
+onBeforeMount(async () => {
+  data.account = await invoke("generate_account");
+  initWebSocket();
+});
+
+onMounted(() => {
+  eventBus.on("addDevice", (deviceIp: any) => {
+    console.log("接收到事件 addDevice设备IP:", deviceIp);
+    if (!data.deviceList.some((device) => device.ip === deviceIp)) {
+      data.deviceList.push({
+        ip: deviceIp,
+        password: "",
+      });
+    }
+    console.log("更新后的设备列表:", data.deviceList);
+  });
+
+  appWindow
+    .onCloseRequested(async (event) => {
+      event.preventDefault();
+      closeRemoteDesktop();
+    })
+    .then((unlistenFn: Function) => {
+      // 监听函数
+    });
+});
+
+onUnmounted(() => {
+  // 清理
+});
 </script>
+
 <template>
   <div v-if="data.isConnecting" class="connecting-message" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0">
     正在被远控{{ data.screenChangesignal }}个窗口...
@@ -463,27 +537,8 @@ const selectDevice = (device:{ip:string}) => {
   <button v-if="data.isConnecting" class="close-btn" @click="closeRemoteDesktop()">
     结束被控
   </button>
+
   <div class="container">
-    <div class="sidebar">
-      <div class="device-list-container">
-        <div @click="toggleDeviceList" class="device-list-title">
-          <i class="icon fas fa-desktop"></i>设备列表
-          <i :class="['icon', 'fas', isDeviceListOpen ? 'fa-chevron-down' : 'fa-chevron-right']"></i>
-        </div>
-        <ul v-show="isDeviceListOpen" class="device-list">
-          <li v-for="(device, index) in data.deviceList" :key="index" class="device-item">
-            <div class="device-item-content" @click="selectDevice(device)">
-              <span>
-                {{ device.ip }}
-              </span>
-              <span class="close-btn" @click.stop="removeDevice(index)">
-                &times;
-              </span>
-            </div>
-          </li>
-        </ul>
-      </div>
-    </div>
     <div class="main">
       <div class="ip-display">
         ip: <span>{{ data.account.id }}</span>
