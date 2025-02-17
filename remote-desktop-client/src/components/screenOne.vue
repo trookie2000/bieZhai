@@ -97,7 +97,10 @@ onBeforeMount(async () => {
 });
 
 onMounted(() => {
+  
   remoteDesktop();
+  document.addEventListener("keydown", onKeyDown);
+  document.addEventListener("keyup", onKeyUp);
   appWindow
     .onCloseRequested(async (event) => {
       event.preventDefault();
@@ -115,6 +118,8 @@ onBeforeUnmount(() => {
 onUnmounted(() => {
   if (unlisten) {
     unlisten();
+    document.removeEventListener("keydown", onKeyDown);
+    document.removeEventListener("keyup", onKeyUp);
   }
 });
 
@@ -187,7 +192,37 @@ function closeVideoByMacAddress(msg: Record<string, any>) {
     closeVideo(video);
   }
 }
+ function onKeyDown(e: KeyboardEvent) {
+   // 如果没有激活的视频，就不发事件
+   if (activeVideoIndex.value === null) return;
+   const video = videos[activeVideoIndex.value];
+   if (!video) return;
 
+   const remoteId = video.receiverAccount.id;
+   sendToClient(remoteId, {
+     type: InputEventType.KEY_EVENT,
+     data: {
+       // 也可以自己定义更具体的 eventType
+       eventType: KeyboardStatus.MOUSE_DOWN,
+       key: e.key,
+     },
+   });
+ }
+
+ function onKeyUp(e: KeyboardEvent) {
+   if (activeVideoIndex.value === null) return;
+   const video = videos[activeVideoIndex.value];
+   if (!video) return;
+
+   const remoteId = video.receiverAccount.id;
+   sendToClient(remoteId, {
+     type: InputEventType.KEY_EVENT,
+     data: {
+       eventType: KeyboardStatus.MOUSE_UP,
+       key: e.key,
+     },
+   });
+ }
 // ====================== 4. WebRTC 处理函数 ======================
 // 处理视频邀请
 const handleVideoOfferMsg = async (msg: Record<string, any>) => {
