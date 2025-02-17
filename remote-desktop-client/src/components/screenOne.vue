@@ -65,7 +65,6 @@ const data = reactive({
 
 // WebSocket
 let ws: WebSocket;
-// 存储本地桌面流（如果需要）
 let webcamStream: MediaStream;
 let webcamStreamArr: MediaStream[] = [];
 
@@ -97,7 +96,7 @@ onBeforeMount(async () => {
 });
 
 onMounted(() => {
-  
+
   remoteDesktop();
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("keyup", onKeyUp);
@@ -192,37 +191,37 @@ function closeVideoByMacAddress(msg: Record<string, any>) {
     closeVideo(video);
   }
 }
- function onKeyDown(e: KeyboardEvent) {
-   // 如果没有激活的视频，就不发事件
-   if (activeVideoIndex.value === null) return;
-   const video = videos[activeVideoIndex.value];
-   if (!video) return;
+function onKeyDown(e: KeyboardEvent) {
+  // 如果没有激活的视频，就不发事件
+  if (activeVideoIndex.value === null) return;
+  const video = videos[activeVideoIndex.value];
+  if (!video) return;
 
-   const remoteId = video.receiverAccount.id;
-   sendToClient(remoteId, {
-     type: InputEventType.KEY_EVENT,
-     data: {
-       // 也可以自己定义更具体的 eventType
-       eventType: KeyboardStatus.MOUSE_DOWN,
-       key: e.key,
-     },
-   });
- }
+  const remoteId = video.receiverAccount.id;
+  sendToClient(remoteId, {
+    type: InputEventType.KEY_EVENT,
+    data: {
+      // 也可以自己定义更具体的 eventType
+      eventType: KeyboardStatus.MOUSE_DOWN,
+      key: e.key,
+    },
+  });
+}
 
- function onKeyUp(e: KeyboardEvent) {
-   if (activeVideoIndex.value === null) return;
-   const video = videos[activeVideoIndex.value];
-   if (!video) return;
+function onKeyUp(e: KeyboardEvent) {
+  if (activeVideoIndex.value === null) return;
+  const video = videos[activeVideoIndex.value];
+  if (!video) return;
 
-   const remoteId = video.receiverAccount.id;
-   sendToClient(remoteId, {
-     type: InputEventType.KEY_EVENT,
-     data: {
-       eventType: KeyboardStatus.MOUSE_UP,
-       key: e.key,
-     },
-   });
- }
+  const remoteId = video.receiverAccount.id;
+  sendToClient(remoteId, {
+    type: InputEventType.KEY_EVENT,
+    data: {
+      eventType: KeyboardStatus.MOUSE_UP,
+      key: e.key,
+    },
+  });
+}
 // ====================== 4. WebRTC 处理函数 ======================
 // 处理视频邀请
 const handleVideoOfferMsg = async (msg: Record<string, any>) => {
@@ -293,22 +292,39 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
     initRTCDataChannel(connection);
 
     // 获取本地桌面流
-    webcamStream = await navigator.mediaDevices.getDisplayMedia({
+    const newStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: false,
     });
-    webcamStream.getTracks().forEach((track: MediaStreamTrack) =>
-      connection.pc.addTrack(track, webcamStream)
-    );
 
+    // 记录到一个数组，方便 close 时统一管理
+    webcamStreamArr.push(newStream);
+
+    // 把这个新流的所有轨道都加到 RTCPeerConnection
+    newStream.getTracks().forEach((track) => {
+      connection.pc.addTrack(track, newStream);
+    });
+    await renegotiate(connection);
     // 发起 Offer
-    sendOffer(connection);
+    // sendOffer(connection);
   } catch (error) {
     console.error("处理远程桌面请求时出错:", error);
     data.isConnecting = false;
   }
 };
+// 做一次 Offer -> Answer 的再协商
+async function renegotiate(connection: Connection) {
+  const offer = await connection.pc.createOffer();
+  await connection.pc.setLocalDescription(offer);
 
+  // 发送到信令服务器
+  sendToServer({
+    msg_type: MessageType.VIDEO_OFFER,
+    receiver: connection.remoteId,
+    msg: JSON.stringify(connection.pc.localDescription),
+    sender: data.account.id,
+  });
+}
 // ====================== 5. 创建 RTCPeerConnection ======================
 function createConnection(remoteId: string): Connection {
   const iceServer = {
@@ -352,10 +368,14 @@ function createConnection(remoteId: string): Connection {
 
   // Track 事件
   pc.ontrack = (event: RTCTrackEvent) => {
-    const stream = event.streams[0];
-    addVideo(stream, remoteId);
+    // 可能会有多条 stream
+    event.streams.forEach((stream) => {
+      // 如果本地 videos 里还没有，就添加
+      if (!videos.some((v) => v.stream.id === stream.id)) {
+        addVideo(stream, remoteId);
+      }
+    });
   };
-
   // 当对方创建数据通道
   pc.ondatachannel = (e: RTCDataChannelEvent) => {
     connection.dc = e.channel;
@@ -384,10 +404,12 @@ function initRTCDataChannel(connection: Connection) {
         w = windInfo.width;
         h = windInfo.height;
       }
+      const lastStream = webcamStreamArr[webcamStreamArr.length - 1];
+      const streamId = lastStream ? lastStream.id : "unknown";
       // 发送给对端
       connection.dc?.send(
         JSON.stringify({
-          id: webcamStream ? webcamStream.id : "unknown",
+          id: streamId,
           name: windInfo.name,
           width: w * window.devicePixelRatio,
           height: h * window.devicePixelRatio,
@@ -463,17 +485,17 @@ function handleDataChannel(e: RTCDataChannelEvent, connection: Connection) {
 }
 
 // ====================== 7. 发起 Offer ======================
-const sendOffer = async (connection: Connection) => {
-  const offer = await connection.pc.createOffer();
-  await connection.pc.setLocalDescription(offer);
+// const sendOffer = async (connection: Connection) => {
+//   const offer = await connection.pc.createOffer();
+//   await connection.pc.setLocalDescription(offer);
 
-  sendToServer({
-    msg_type: MessageType.VIDEO_OFFER,
-    receiver: connection.remoteId,
-    msg: JSON.stringify(connection.pc.localDescription),
-    sender: data.account.id,
-  });
-};
+//   sendToServer({
+//     msg_type: MessageType.VIDEO_OFFER,
+//     receiver: connection.remoteId,
+//     msg: JSON.stringify(connection.pc.localDescription),
+//     sender: data.account.id,
+//   });
+// };
 
 // ====================== 8. 关闭所有连接 ======================
 function closeAllConnections() {
@@ -504,7 +526,7 @@ const closeRemoteDesktop = async () => {
     data.isShowRemoteDesktop = false;
     // 关闭所有连接
     closeAllConnections();
-
+    closeAllVideos();
     // 停止并移除所有的视频流
     webcamStreamArr.forEach((stream) => {
       stream.getTracks().forEach((track) => track.stop());
@@ -540,6 +562,15 @@ function addVideo(stream: MediaStream, remoteId: string) {
     name: "",
   };
   videos.push(videoObj);
+}
+function closeAllVideos() {
+  // 方法1：倒序遍历，避免 splice 导致下标错乱
+  for (let i = videos.length - 1; i >= 0; i--) {
+    closeVideo(videos[i]);
+  }
+  // 或者方法2：先复制一份，再遍历复制的数组
+  // const copy = [...videos];
+  // copy.forEach(video => closeVideo(video));
 }
 
 const closeVideo = (video: Video) => {
@@ -756,37 +787,23 @@ function reportError(err: any) {
     <!-- 列表 -->
     <div class="video-list">
       <ul>
-        <li
-          v-for="(videosOfDevice, deviceId) in groupedVideos"
-          :key="deviceId"
-          class="device-item"
-        >
+        <li v-for="(videosOfDevice, deviceId) in groupedVideos" :key="deviceId" class="device-item">
           <div @click="toggleDevice(deviceId)" class="device-name">
             <i class="icon fas fa-desktop"></i>{{ deviceId }}
-            <i
-              :class="[
-                'icon',
-                'fas',
-                activeDeviceId === deviceId ? 'fa-chevron-down' : 'fa-chevron-right',
-              ]"
-            ></i>
+            <i :class="[
+              'icon',
+              'fas',
+              activeDeviceId === deviceId ? 'fa-chevron-down' : 'fa-chevron-right',
+            ]"></i>
           </div>
           <ul v-show="activeDeviceId === deviceId" class="sub-list">
-            <li
-              v-for="video in videosOfDevice"
-              :key="video.id"
-              class="video-item"
-            >
+            <li v-for="video in videosOfDevice" :key="video.id" class="video-item">
               <div class="video-item-content">
-                <span
-                  @click="
-                    () => {
-                      showVideo(video);
-                      setWindowTop(video);
-                    }
-                  "
-                  class="video-name"
-                >
+                <span @click="() => {
+                    showVideo(video);
+                    setWindowTop(video);
+                  }
+                  " class="video-name">
                   <i class="icon fas fa-video"></i>{{ video.name }}
                 </span>
                 <span @click="closeVideo(video)" class="close-btn">
@@ -801,26 +818,15 @@ function reportError(err: any) {
 
     <!-- 视频区域 -->
     <div class="video-grid">
-      <div
-        v-for="(video, index) in videos"
-        :key="video.id"
-        class="video-wrapper"
-        v-show="activeVideoIndex === index"
-      >
+      <div v-for="(video, index) in videos" :key="video.id" class="video-wrapper" v-show="activeVideoIndex === index">
         <div class="video-container">
-          <video
-            class="video"
-            ref="videoElements"
-            :srcObject="video.stream"
+          <video class="video" ref="videoElements" :srcObject="video.stream"
             @mousedown="(e) => mouseDown(e, (videoElements as HTMLVideoElement[])[index], video.receiverAccount.id)"
             @mouseup="(e) => mouseUp(e, (videoElements as HTMLVideoElement[])[index], video.receiverAccount.id)"
             @mousemove="(e) => mouseMove(e, (videoElements as HTMLVideoElement[])[index], video.receiverAccount.id)"
             @wheel="(e) => wheel(e, (videoElements as HTMLVideoElement[])[index], video.receiverAccount.id)"
             @contextmenu.prevent="(e) => rightClick(e, (videoElements as HTMLVideoElement[])[index], video.receiverAccount.id)"
-            x5-video-player-type="h5-page"
-            autoplay
-            controls
-          ></video>
+            x5-video-player-type="h5-page" autoplay controls></video>
         </div>
       </div>
     </div>

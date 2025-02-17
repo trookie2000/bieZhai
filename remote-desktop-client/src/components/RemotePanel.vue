@@ -259,7 +259,6 @@ async function sendOffer(remoteId: string) {
 /** 初始化 WebSocket 连接 */
 const initWebSocket = () => {
   ws = new WebSocket(`ws://192.168.0.124:8081/conn/${data.account.id}`);
-
   ws.onopen = () => {
     // 定时心跳
     setInterval(() => {
@@ -425,17 +424,29 @@ const closeRemoteDesktop = async () => {
   if (confirmed) {
     appWindow.setFullscreen(false);
     data.isShowRemoteDesktop = false;
-    appWindow.close();
 
-    // 停止所有共享流
+    // 清空视频元素
+    if (desktop.value) {
+      desktop.value.srcObject = null;
+    }
+
+    // 遍历所有连接，停止流并关闭 PeerConnection
     connections.forEach((conn, remoteId) => {
+      // 关闭所有共享流
       conn.webcamStreamArr.forEach((stream) => {
         stream.getTracks().forEach((track) => track.stop());
       });
-      conn.webcamStreamArr = [];
+      // 关闭 PeerConnection
+      conn.pc.close();
     });
+    // 清空 connections Map
+    connections.clear();
 
-    close(); // 彻底清理
+    // 清除定时器（如果有用到 data.clearWindowInfoInterval）
+    if (data.clearWindowInfoInterval) {
+      data.clearWindowInfoInterval();
+      data.clearWindowInfoInterval = null;
+    }
 
     // 通知对端停止共享
     sendToServer({
@@ -444,6 +455,9 @@ const closeRemoteDesktop = async () => {
       msg: data.receiverAccount.password,
       sender: data.account.id,
     });
+
+    // 关闭当前窗口
+    appWindow.close();
   }
 };
 
@@ -485,12 +499,6 @@ function sendToClient(remoteId: string, msg: Record<string, any>) {
     conn.dc.send(JSON.stringify(msg));
   }
 }
-
-/** 选择某个设备 */
-const selectDevice = (device: { ip: string }) => {
-  console.log(`Selected device IP: ${device.ip}`);
-  data.receiverAccount.id = device.ip;
-};
 
 /** 错误处理 */
 function reportError(err: any) {
@@ -550,7 +558,6 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
-
 <style lang="less" scoped>
 .container {
   display: flex;
