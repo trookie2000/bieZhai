@@ -359,7 +359,7 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
     video: true,
     audio: false,
   });
-
+  data.isConnecting = true;
   data.screenChangesignal++;
   conn.webcamStreamArr.push(webcamStream);
 
@@ -466,15 +466,22 @@ const close = (msg?: Record<string, any>) => {
   if (msg) {
     // 只关闭特定流
     const id = JSON.parse(msg.msg).id;
-    // 找到对应连接
     const remoteId = msg.sender;
     const conn = connections.get(remoteId);
     if (!conn) return;
 
+    // 停止该流
     const targetStream = conn.webcamStreamArr.find((s) => s.id === id);
     targetStream?.getTracks().forEach((track) => track.stop());
+
+    // ★ 这里减去1
+    data.screenChangesignal--;
+    if (data.screenChangesignal <= 0) {
+      data.screenChangesignal = 0;
+      data.isConnecting = false;
+    }
   } else {
-    // 全部关闭
+    // 如果 msg 不存在，说明要关闭所有流
     connections.forEach((conn) => {
       conn.webcamStreamArr.forEach((stream) => {
         stream.getTracks().forEach((track) => track.stop());
