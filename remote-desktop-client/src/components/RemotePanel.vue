@@ -289,6 +289,9 @@ const initWebSocket = () => {
       case MessageType.CLOSE_REMOTE_DESKTOP:
         close(msg);
         break;
+      case MessageType.STOP_SHARING:
+        closeAll(msg); // 或者直接复用 close(msg) 也行
+        break;
     }
   };
 
@@ -342,6 +345,34 @@ const handleNewICECandidateMsg = async (msg: Record<string, any>) => {
     reportError(err);
   }
 };
+function closeAll(msg?: Record<string, any>) {
+  // 1. 清空视频元素
+  if (desktop.value) {
+    desktop.value.srcObject = null;
+  }
+
+  // 2. 遍历所有连接
+  connections.forEach((conn, remoteId) => {
+    // 停止所有流
+    conn.webcamStreamArr.forEach((stream) => {
+      stream.getTracks().forEach((track) => track.stop());
+    });
+    conn.webcamStreamArr = [];
+
+    // 关闭 PeerConnection
+    conn.pc.close();
+  });
+  connections.clear();
+
+  // 3. 清除定时器
+  if (data.clearWindowInfoInterval) {
+    data.clearWindowInfoInterval();
+    data.clearWindowInfoInterval = null;
+  }
+
+  // 4. 如果要关闭本地窗口，也可以在这里关
+  // appWindow.close();
+}
 
 /** 收到对方请求 REMOTE_DESKTOP */
 const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
@@ -364,24 +395,24 @@ const handleRemoteDesktopRequest = async (msg: Record<string, any>) => {
   conn.webcamStreamArr.push(webcamStream);
 
   // 监听屏幕流结束
-// 给流中的每条 track 添加 onended 监听
-webcamStream.getTracks().forEach((track) => {
-  track.addEventListener("ended", (e) => {
-    // 在这里处理停止共享逻辑
-    data.screenChangesignal--;
-    sendToServer({
-      msg_type: MessageType.STOP_SHARING,
-      receiver: remoteId,
-      msg: JSON.stringify({
-        id: webcamStream.id, // 或者 track.id
-      }),
-      sender: data.account.id,
+  // 给流中的每条 track 添加 onended 监听
+  webcamStream.getTracks().forEach((track) => {
+    track.addEventListener("ended", (e) => {
+      // 在这里处理停止共享逻辑
+      data.screenChangesignal--;
+      sendToServer({
+        msg_type: MessageType.STOP_SHARING,
+        receiver: remoteId,
+        msg: JSON.stringify({
+          id: webcamStream.id, // 或者 track.id
+        }),
+        sender: data.account.id,
+      });
+      if (data.screenChangesignal === 0) {
+        data.isConnecting = false;
+      }
     });
-    if (data.screenChangesignal === 0) {
-      data.isConnecting = false;
-    }
   });
-});
 
   // 把每条 track 加到 PeerConnection
   webcamStream.getTracks().forEach((track) => {
@@ -404,7 +435,7 @@ const remoteDesktop = async () => {
   const webview = new WebviewWindow("1", {
     url: "#/screenOne",
   });
-  webview.once("tauri://created", () => {});
+  webview.once("tauri://created", () => { });
   webview.once("tauri://error", (e) => {
     console.error("Webview error:", e);
   });
@@ -546,7 +577,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="data.isConnecting" class="connecting-message" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0">
+  <div v-if="data.isConnecting" class="connecting-message"
+    style="position: fixed; top: 0; left: 0; right: 0; bottom: 0">
     正在被远控{{ data.screenChangesignal }}个窗口...
   </div>
   <button v-if="data.isConnecting" class="close-btn" @click="closeRemoteDesktop()">

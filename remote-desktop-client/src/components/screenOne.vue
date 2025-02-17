@@ -519,6 +519,23 @@ const remoteDesktop = async () => {
   }, 0);
 };
 
+// ====================== 10. 视频管理 ======================
+const videos: Video[] = reactive([]);
+const videoElements = ref<HTMLVideoElement[]>([]);
+
+function addVideo(stream: MediaStream, remoteId: string) {
+  // 每条新流都对应一个 Video 对象
+  const videoObj: Video = {
+    id: Date.now().toString(),
+    stream,
+    receiverAccount: {
+      id: remoteId,
+      password: "",
+    },
+    name: "",
+  };
+  videos.push(videoObj);
+}
 const closeRemoteDesktop = async () => {
   const confirmed = await confirm("确认结束远程控制？", "提示");
   if (confirmed) {
@@ -545,32 +562,11 @@ const closeRemoteDesktop = async () => {
     appWindow.close();
   }
 };
-
-// ====================== 10. 视频管理 ======================
-const videos: Video[] = reactive([]);
-const videoElements = ref<HTMLVideoElement[]>([]);
-
-function addVideo(stream: MediaStream, remoteId: string) {
-  // 每条新流都对应一个 Video 对象
-  const videoObj: Video = {
-    id: Date.now().toString(),
-    stream,
-    receiverAccount: {
-      id: remoteId,
-      password: "",
-    },
-    name: "",
-  };
-  videos.push(videoObj);
-}
 function closeAllVideos() {
   // 方法1：倒序遍历，避免 splice 导致下标错乱
   for (let i = videos.length - 1; i >= 0; i--) {
     closeVideo(videos[i]);
   }
-  // 或者方法2：先复制一份，再遍历复制的数组
-  // const copy = [...videos];
-  // copy.forEach(video => closeVideo(video));
 }
 
 const closeVideo = (video: Video) => {
