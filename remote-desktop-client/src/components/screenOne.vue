@@ -171,7 +171,7 @@ const initWebSocket = () => {
         handleRemoteDesktopRequest(msg);
         break;
       case MessageType.STOP_SHARING:
-        closeVideoByMacAddress(msg);
+        close();
         break;
     }
   };
