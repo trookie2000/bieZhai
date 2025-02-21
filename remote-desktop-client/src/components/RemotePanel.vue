@@ -4,8 +4,6 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { confirm } from "@tauri-apps/api/dialog";
 import { appWindow, WebviewWindow } from "@tauri-apps/api/window";
 import {
-  MouseStatus,
-  WheelStatus,
   KeyboardStatus,
   MessageType,
   InputEventType,
@@ -34,16 +32,6 @@ const data = reactive({
   clearWindowInfoInterval: null as (() => void) | null,
   deviceList: [] as { ip: string; password: string }[], // 设备列表
 });
-
-const isDeviceListOpen = ref(false);
-
-const toggleDeviceList = () => {
-  isDeviceListOpen.value = !isDeviceListOpen.value;
-};
-
-const removeDevice = (index: number) => {
-  data.deviceList.splice(index, 1);
-};
 
 // 视频元素引用
 const desktop = ref<HTMLVideoElement>();

@@ -46,6 +46,26 @@ interface Connection {
   lastTimestamp?: number;
 }
 
+// 定义一个接口来描述统计数据
+interface WebRTCStats {
+  timestamp: number;         // 时间戳（单位：毫秒）
+  rtt?: number;              // 往返时延（毫秒）
+  jitter?: number;           // 网络抖动（毫秒）
+  packetsLost?: number;      // 丢包数
+  packetsReceived?: number;  // 接收包数
+  lossRate?: number;         // 丢包率（百分比）
+  bytesSent?: number;        // 累计发送字节数
+  bitrate?: number;          // 带宽占用（bps），通过 bytesSent 差值计算
+}
+// 用一个对象保存每个远程连接的历史统计数据
+const statsHistory: { [remoteId: string]: WebRTCStats[] } = {};
+
+// 用于计算带宽需要保存上一次采集的 bytesSent 和时间戳
+const lastStats: { [remoteId: string]: { bytesSent: number; timestamp: number } } = {};
+
+// 定时器 ID
+let statsInterval: number | null = null;
+
 // 统一管理所有远程连接
 const connections: Record<string, Connection> = reactive({});
 
@@ -88,6 +108,7 @@ interface Video {
   top?: number;
   bottom?: number;
 }
+
 // ====================== 2. 生命周期钩子 ======================
 onBeforeMount(async () => {
   // 获取本地 ID、密码
@@ -98,6 +119,7 @@ onBeforeMount(async () => {
 onMounted(() => {
 
   remoteDesktop();
+  startCollectingStats();
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("keyup", onKeyUp);
   appWindow
@@ -149,6 +171,7 @@ const initWebSocket = () => {
             if (report.type === "outbound-rtp" && report.jitter) {
               console.log(`[${remoteId}] 网络抖动（Jitter）:`, report.jitter * 1000, "毫秒");
             }
+            startCollectingStats();
           });
         });
       }
@@ -181,16 +204,6 @@ const initWebSocket = () => {
   };
 };
 
-// 当共享方关闭按钮后，远控方关闭对应 video
-function closeVideoByMacAddress(msg: Record<string, any>) {
-  const id = JSON.parse(msg.msg).id;
-  const video = videos.find((item: any) => {
-    return item.stream.id == id;
-  });
-  if (video) {
-    closeVideo(video);
-  }
-}
 function onKeyDown(e: KeyboardEvent) {
   // 如果没有激活的视频，就不发事件
   if (activeVideoIndex.value === null) return;
@@ -198,6 +211,8 @@ function onKeyDown(e: KeyboardEvent) {
   if (!video) return;
 
   const remoteId = video.receiverAccount.id;
+  const sendTime = performance.now();  // 记录发送时间
+
   sendToClient(remoteId, {
     type: InputEventType.KEY_EVENT,
     data: {
@@ -205,7 +220,14 @@ function onKeyDown(e: KeyboardEvent) {
       eventType: KeyboardStatus.MOUSE_DOWN,
       key: e.key,
     },
+    timestamp: sendTime,
   });
+
+  // 接收到确认后的延迟计算
+  const receiveTime = performance.now();  // 接收到确认的时间
+  const eventDelay = receiveTime - sendTime;  // 延迟（单位：ms）
+  const formattedDelay = eventDelay.toFixed(2);  // 将延迟格式化为两位小数
+  console.log(`键盘按键抬起的延迟 ${remoteId}: ${formattedDelay} ms`);
 }
 
 function onKeyUp(e: KeyboardEvent) {
@@ -221,6 +243,7 @@ function onKeyUp(e: KeyboardEvent) {
       key: e.key,
     },
   });
+
 }
 // ====================== 4. WebRTC 处理函数 ======================
 // 处理视频邀请
@@ -557,7 +580,7 @@ const closeRemoteDesktop = async () => {
       msg: data.receiverAccount.password,
       sender: data.account.id,
     });
-
+    startCollectingStats();
     // 关闭当前窗口
     appWindow.close();
   }
@@ -571,7 +594,7 @@ function closeAllVideos() {
 
 const closeVideo = (video: Video) => {
   console.log("Closing video with ID:", video.id);
-
+  stopCollectingStats();
   const index = videos.findIndex((v) => v.id === video.id);
   if (index !== -1) {
     // 通知对端关闭
@@ -620,6 +643,7 @@ function sendMouseEvent(
   eventType: string,
   remoteId: string
 ) {
+  const now = performance.now();
   const connection = connections[remoteId];
   if (!connection || !connection.remoteDesktopDpi) return;
 
@@ -632,7 +656,7 @@ function sendMouseEvent(
   const x = Math.round(e.offsetX * xRatio) + left;
   const y = Math.round(e.offsetY * yRatio) + top;
 
-  const now = performance.now();
+
   const deltaTime = now - lastTimestamp;
   const deltaX = x - lastMouseX;
   const deltaY = y - lastMouseY;
@@ -642,8 +666,14 @@ function sendMouseEvent(
   sendToClient(remoteId, {
     type: InputEventType.MOUSE_EVENT,
     data: { x, y, speedX, speedY, eventType },
-  });
+    timestamp: now,  //
 
+  });
+  const receiveTime = performance.now();  // 接收到确认的时间
+  const eventDelay = receiveTime - now;  // 延迟（单位：ms）
+  const formattedDelay = eventDelay.toFixed(2);  // 将延迟格式化为两位小数
+
+  console.log(`鼠标延迟 ${remoteId}: ${formattedDelay} ms`);
   lastMouseX = x;
   lastMouseY = y;
   lastTimestamp = now;
@@ -776,6 +806,103 @@ watch(
 function reportError(err: any) {
   console.error("WebRTC Error:", err);
 }
+
+/**
+ * 每秒收集一次所有连接的 WebRTC 统计数据，并保存到 statsHistory 中
+ */
+function startCollectingStats() {
+  statsInterval = window.setInterval(() => {
+    for (const remoteId in connections) {
+      const conn = connections[remoteId];
+      conn.pc.getStats(null).then((stats) => {
+        let candidatePairStats: any = null;
+        let outboundRtpStats: any = null;
+        let inboundRtpStats: any = null;
+
+        stats.forEach((report) => {
+          // 获取当前选中的候选对，用于 RTT
+          if (report.type === "candidate-pair" && report.selected && report.currentRoundTripTime !== undefined) {
+            candidatePairStats = report;
+          }
+          // 获取视频出站统计
+          if (report.type === "outbound-rtp" && report.kind === "video") {
+            outboundRtpStats = report;
+          }
+          // 获取视频入站统计
+          if (report.type === "inbound-rtp" && report.kind === "video") {
+            inboundRtpStats = report;
+          }
+        });
+
+        const now = performance.now();
+        const stat: WebRTCStats = { timestamp: now };
+
+        // RTT
+        if (candidatePairStats) {
+          stat.rtt = candidatePairStats.currentRoundTripTime * 1000; // 转换为毫秒
+        }
+        // 抖动（取出站 RTP 的 jitter）
+        if (outboundRtpStats && outboundRtpStats.jitter !== undefined) {
+          stat.jitter = outboundRtpStats.jitter * 1000;
+          // 同时保存 bytesSent 以计算带宽
+          stat.bytesSent = outboundRtpStats.bytesSent;
+        }
+        // 丢包率计算（取入站 RTP 的数据）
+        if (inboundRtpStats) {
+          stat.packetsLost = inboundRtpStats.packetsLost || 0;
+          stat.packetsReceived = inboundRtpStats.packetsReceived || 0;
+          const totalPackets = stat.packetsLost! + stat.packetsReceived!;
+          stat.lossRate = totalPackets > 0 ? (stat.packetsLost! / totalPackets) * 100 : 0;
+
+        }
+        // 带宽计算
+        if (stat.bytesSent !== undefined) {
+          if (lastStats[remoteId]) {
+            const deltaBytes = stat.bytesSent - lastStats[remoteId].bytesSent;
+            const deltaTime = (now - lastStats[remoteId].timestamp) / 1000; // 秒
+            stat.bitrate = deltaTime > 0 ? (deltaBytes * 8) / deltaTime : 0; // 单位：bps
+          }
+          // 更新上一次记录
+          lastStats[remoteId] = { bytesSent: stat.bytesSent, timestamp: now };
+        }
+
+        // 将统计数据保存到历史记录中
+        if (!statsHistory[remoteId]) {
+          statsHistory[remoteId] = [];
+        }
+        statsHistory[remoteId].push(stat);
+
+        // 在控制台打印统计数据
+        console.log(`=== 远程连接 ${remoteId} 的统计数据 ===`);
+        if (stat.rtt !== undefined) {
+          console.log(`RTT：${stat.rtt.toFixed(2)} 毫秒`);
+        }
+        if (stat.jitter !== undefined) {
+          console.log(`网络抖动：${stat.jitter.toFixed(2)} 毫秒`);
+        }
+        if (stat.lossRate !== undefined) {
+          console.log(`丢包率：${stat.lossRate.toFixed(2)}% （丢包数：${stat.packetsLost}，接收数：${stat.packetsReceived}）`);
+        }
+        if (stat.bitrate !== undefined) {
+          console.log(`视频发送带宽：${stat.bitrate.toFixed(2)} bps`);
+        }
+        console.log("========================================");
+      }).catch((err) => {
+        console.error(`获取远程连接 ${remoteId} 统计数据时出错：`, err);
+      });
+    }
+  }, 1000); // 每 1 秒采集一次
+}
+
+/**
+ * 停止统计采集
+ */
+function stopCollectingStats() {
+  if (statsInterval !== null) {
+    clearInterval(statsInterval);
+    statsInterval = null;
+  }
+}
 </script>
 
 <template>
@@ -796,10 +923,10 @@ function reportError(err: any) {
             <li v-for="video in videosOfDevice" :key="video.id" class="video-item">
               <div class="video-item-content">
                 <span @click="() => {
-                    showVideo(video);
-                    setWindowTop(video);
-                  }
-                  " class="video-name">
+                  showVideo(video);
+                  setWindowTop(video);
+                }
+                " class="video-name">
                   <i class="icon fas fa-video"></i>{{ video.name }}
                 </span>
                 <span @click="closeVideo(video)" class="close-btn">
@@ -811,7 +938,6 @@ function reportError(err: any) {
         </li>
       </ul>
     </div>
-
     <!-- 视频区域 -->
     <div class="video-grid">
       <div v-for="(video, index) in videos" :key="video.id" class="video-wrapper" v-show="activeVideoIndex === index">
